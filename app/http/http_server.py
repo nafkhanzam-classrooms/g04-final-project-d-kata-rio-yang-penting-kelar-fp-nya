@@ -226,10 +226,9 @@ class Route:
 
 
 class HTTPServer:
-    # Using socket.socket and select.poll to handle multiple client connection
+    # Using socket.socket and select.epoll to handle multiple client connection
     # provided a way to basic routing handling, supporting multiple http methods defined in the HTTPMethod enum
     def __init__(self, host: str = "0.0.0.0", port: int = 8000, static_dir: Optional[Path] = None):
-        """Initialize server."""
         self.host = host
         self.port = port
         self.static_dir = static_dir.resolve() if static_dir else None
@@ -239,7 +238,7 @@ class HTTPServer:
         self.sock: Optional[socket.socket] = None
         
         # Socket management
-        self.poller = select.poll()
+        self.poller = select.epoll()
         self.fd_to_socket: Dict[int, socket.socket] = {}
         self.socket_buffers: Dict[int, bytes] = {}
         
@@ -353,7 +352,7 @@ class HTTPServer:
         self.sock.setblocking(False)
         self.sock.listen(max(MAX_LISTEN_CLIENTS, 5))
         
-        self.poller.register(self.sock, select.POLLIN)
+        self.poller.register(self.sock, select.EPOLLIN)
         self.fd_to_socket[self.sock.fileno()] = self.sock
     
     # accept incoming client connection and adding it to the cliend fd's
@@ -364,7 +363,7 @@ class HTTPServer:
             client_sock.setblocking(False)
             
             fd = client_sock.fileno()
-            self.poller.register(client_sock, select.POLLIN)
+            self.poller.register(client_sock, select.EPOLLIN)
             self.fd_to_socket[fd] = client_sock
             self.socket_buffers[fd] = b""
         except BlockingIOError:
@@ -481,10 +480,10 @@ class HTTPServer:
                         if sock == self.sock:
                             # Server socket - accept new connection
                             self._accept_client()
-                        elif event & select.POLLIN:
+                        elif event & select.EPOLLIN:
                             # Client socket - read data
                             self._read_from_client(sock)
-                        elif event & (select.POLLHUP | select.POLLERR):
+                        elif event & (select.EPOLLHUP | select.EPOLLERR):
                             # Client disconnected or error
                             self._cleanup_client(sock)
                 
