@@ -1,5 +1,12 @@
 # main entry for the system
 
-from config.config import load_dotenv
+from app.config.config import load_dotenv
+from app.http.http_server import HTTPServer
+
 
 load_dotenv(__name__)
+
+server = HTTPServer(port=8000)
+
+
+server.run()
