@@ -1,22 +1,13 @@
 import json
 import socket
 import select
-import time
+# import time
 from pathlib import Path
 from typing import Optional, Dict, Callable, List, Tuple, Any
-from enum import Enum
+from app.http.router import Route
+from app.http.types import HTTPMethod
 
 MAX_LISTEN_CLIENTS = 10
-
-class HTTPMethod(Enum):
-    # HTTP Methods as Enumeration (Lookup Table)
-    GET = "GET"
-    POST = "POST"
-    PUT = "PUT"
-    DELETE = "DELETE"
-    OPTIONS = "OPTIONS"
-    HEAD = "HEAD"
-
 
 class HTTPRequest:
     def __init__(self, method: str, path: str, headers: Dict[str, str], body: str = "", query: str = ""):
@@ -184,47 +175,6 @@ class HTTPResponse:
         response.set_header("Location", url)
         return response
 
-
-class Route:
-    # generalizing custom HTTP route so it can be reused in different scenarios
-    
-    def __init__(
-        self,
-        path: str,
-        method: str,
-        handler: Callable,
-        is_pattern: bool = False
-    ):
-        self.path = path
-        self.method = method
-        self.handler = handler
-        self.is_pattern = is_pattern
-    
-    # check if the path matches the route's own path (excluding anchor and get parameters), doing simple pattern matching (no regex)
-    def matches(self, path: str, method: str) -> Tuple[bool, Dict[str, str]]:
-        if self.method.upper() != method.upper():
-            return False, {}
-        
-        if not self.is_pattern:
-            return self.path == path, {}
-        
-        # Simple pattern matching: /users/:id -> /users/123
-        pattern_parts = self.path.split('/')
-        path_parts = path.split('/')
-        
-        if len(pattern_parts) != len(path_parts):
-            return False, {}
-        
-        params = {}
-        for pattern_part, path_part in zip(pattern_parts, path_parts):
-            if pattern_part.startswith(':'):
-                params[pattern_part[1:]] = path_part
-            elif pattern_part != path_part:
-                return False, {}
-        
-        return True, params
-
-
 class HTTPServer:
     # Using socket.socket and select.epoll to handle multiple client connection
     # provided a way to basic routing handling, supporting multiple http methods defined in the HTTPMethod enum
@@ -249,10 +199,26 @@ class HTTPServer:
         self.middleware: List[Callable] = []
     
     
+    def convert_http_method_enum(self, method: str) -> HTTPMethod:
+        if method.upper() == 'GET':
+            return HTTPMethod.GET
+        elif method.upper() == 'POST':
+            return HTTPMethod.POST
+        elif method.upper() == 'PUT':
+            return HTTPMethod.PUT
+        elif method.upper() == 'OPTIONS':
+            return HTTPMethod.OPTIONS
+        elif method.upper() == 'HEAD':
+            return HTTPMethod.HEAD
+        elif method.upper() == 'DELETE':
+            return HTTPMethod.DELETE
+        else:
+            return HTTPMethod.UNKNOWN
+
     # decorator function to register a route to the HTTP server for multiple methods for the same path
-    def route(self, path: str, methods: Optional[List[str]] = None) -> Callable:
+    def route(self, path: str, methods: Optional[List[HTTPMethod]] = None) -> Callable:
         if methods is None:
-            methods = ["GET"]
+            methods = [HTTPMethod.GET]
         
         def decorator(handler: Callable) -> Callable:
             for method in methods:
@@ -264,21 +230,22 @@ class HTTPServer:
     
     # add a route handler manually by specifying the method and the path individually
     def add_route(self, path: str, method: str, handler: Callable) -> None:
-        route = Route(path, method, handler, is_pattern=":" in path)
+        enumed_method = self.convert_http_method_enum(method)
+        route = Route(path, enumed_method, handler, is_pattern=":" in path)
         self.routes.append(route)
     
     # decorator function to automatically adds a route by calling its designated method and the path string
     def get(self, path: str) -> Callable:
-        return self.route(path, ["GET"])
+        return self.route(path, [HTTPMethod.GET])
     
     def post(self, path: str) -> Callable:
-        return self.route(path, ["POST"])
+        return self.route(path, [HTTPMethod.POST])
     
     def put(self, path: str) -> Callable:
-        return self.route(path, ["PUT"])
+        return self.route(path, [HTTPMethod.PUT])
     
     def delete(self, path: str) -> Callable:
-        return self.route(path, ["DELETE"])
+        return self.route(path, [HTTPMethod.DELETE])
     
     
     # middleware for the route handler
@@ -299,7 +266,7 @@ class HTTPServer:
 
     # internal function to find the handler for a specific path and method, 
     # returns the callable object for the handler and the params included in the path, otherwise just an empty tuple
-    def _find_handler(self, path: str, method: str) -> Tuple[Optional[Callable], Dict[str, str]]:
+    def _find_handler(self, path: str, method: HTTPMethod) -> Tuple[Optional[Callable], Dict[str, str]]:
         for route in self.routes:
             matches, params = route.matches(path, method)
             if matches:
@@ -311,14 +278,13 @@ class HTTPServer:
     # if the handler response is None, 204 will be returned
     # if there are errors in the function, 500 will be returned
     def _handle_request_impl(self, request: HTTPRequest) -> HTTPResponse:
-        """Process request and generate response."""
         # Apply middleware
         response = self._apply_middleware(request)
         if response is not None:
             return response
         
         # Find and call handler
-        handler, params = self._find_handler(request.path, request.method)
+        handler, params = self._find_handler(request.path, self.convert_http_method_enum(request.method))
         
         if handler is None:
             return HTTPResponse(404, b"Not Found")
