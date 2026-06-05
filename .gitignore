@@ -1,3 +1,4 @@
+app/http/testing/*
 __pycache__
 .env
 

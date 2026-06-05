@@ -6,27 +6,40 @@ from pathlib import Path
 from typing import Optional, Dict, Callable, List, Tuple, Any
 from app.http.router import Route
 from app.http.types import HTTPMethod
+from app.http.multipart import MultipartFile
 
 MAX_LISTEN_CLIENTS = 10
 
 class HTTPRequest:
-    def __init__(self, method: str, path: str, headers: Dict[str, str], body: str = "", query: str = ""):
+    def __init__(self, method: str, path: str, headers: Dict[str, str], body: bytes = b"", query: str = ""):
         self.method = method
         self.path = path
         self.headers = headers
         self.body = body
         self.query = query
         self.client_addr = None
+
+        self.multipart_parsed = False
+        self.multipart_form = {}
+        self.multipart_files = []
     
     # static method to parse incoming HTTP request and returns an instance of HTTP request so it can be reusable
     # if in the middle of parsing an error occurs, the method will returns None
     @staticmethod
-    def parse(raw_request: str) -> Optional["HTTPRequest"]:
+    def parse(raw_request: bytes) -> Optional["HTTPRequest"]:
         try:
-            header_block, _, body = raw_request.partition('\r\n\r\n')
+            headers_end = raw_request.find(b"\r\n\r\n")
+
+            if headers_end == -1:
+                return None
+
+            headers_bytes = raw_request[:headers_end]
+            body = raw_request[headers_end + 4:]
+
+            header_block = headers_bytes.decode("utf-8", errors="ignore")
 
             print(header_block)
-            print(_ + "\n\n")
+            print("\n\n")
             print(body)
             lines = header_block.split('\r\n')
             
@@ -58,6 +71,161 @@ class HTTPRequest:
             return HTTPRequest(method, path, headers, body, query)
         except Exception:
             return None
+    
+    def json(self):
+        return json.loads(self.body.decode("utf-8"))
+
+    def _parse_multipart(self) -> None:
+        if self.multipart_parsed:
+            return
+
+        boundary = self.boundary
+
+        if not boundary:
+            return
+        
+        try:
+            # split by boundary line inside the POST multipart body
+            boundary_bytes = ("--" + boundary).encode()
+            parts = self.body.split(boundary_bytes)
+            
+            # Process each part
+            for part in parts:
+                # Skip empty parts and final boundary
+                if not part.strip() or part.startswith(b"--"):
+                    continue
+                
+                # Remove leading \r\n
+                if part.startswith(b"\r\n"):
+                    part = part[2:]
+                
+                # Find headers/body separator
+                header_end = part.find(b"\r\n\r\n")
+                if header_end == -1:
+                    continue
+ 
+                headers_section = part[:header_end]
+                data = part[header_end + 4:]
+ 
+                # Remove trailing \r\n
+                data = data.rstrip(b"\r\n")
+ 
+                # Parse headers
+                header_text = headers_section.decode("utf-8", errors="ignore")
+                filename = None
+                field_name = None
+                content_type = ""
+ 
+                for line in header_text.split("\r\n"):
+                    line_lower = line.lower()
+                    
+                    # Parse Content-Disposition header
+                    if line_lower.startswith("content-disposition:"):
+                        self._parse_content_disposition(line, field_name, filename)
+                        field_name, filename = self._extract_disposition_params(line)
+                    
+                    # Parse Content-Type header
+                    elif line_lower.startswith("content-type:"):
+                        # Extract content type after the colon
+                        content_type = line.split(":", 1)[1].strip()
+ 
+                # Skip if no field name
+                if not field_name:
+                    continue
+ 
+                # Add to appropriate collection
+                if filename:
+                    # It's a file
+                    self.multipart_files.append(
+                        MultipartFile(
+                            field_name,
+                            filename,
+                            content_type,
+                            data
+                        )
+                    )
+                else:
+                    # store it as a form field
+                    self.multipart_form[field_name] = data.decode("utf-8", errors="ignore")
+ 
+            self.multipart_parsed = True
+        
+        except Exception as e:
+            print(f"Error parsing multipart data: {e}")
+            self.multipart_parsed = True
+
+    def _extract_disposition_params(self, line: str) -> tuple:
+        # extract field_name and filename from Content-Disposition header.
+        field_name = None
+        filename = None
+        
+        try:
+            # split by semicolon to get parameters
+            parts = line.split(";")
+            
+            for part in parts:
+                part = part.strip()
+                
+                # Extract name parameter
+                if part.lower().startswith("name="):
+                    # remove 'name=' and quotes
+                    field_name = part[5:].strip('"').strip("'")
+                
+                # extract filename parameter
+                elif part.lower().startswith("filename="):
+                    # Remove 'filename=' and quotes
+                    filename = part[9:].strip('"').strip("'")
+        
+        except Exception as e:
+            print(f"Error extracting disposition parameters: {e}")
+        
+        return field_name, filename
+ 
+    def _parse_content_disposition(self, line: str, field_name: str, filename: str) -> tuple:
+        # legacy method for backward compatibility.
+        # use _extract_disposition_params instead.
+        return self._extract_disposition_params(line)
+
+    def form(self) -> Dict[str, str]:
+        self._parse_multipart()
+        return self.multipart_form
+
+    def files(self) -> List[MultipartFile]:
+        self._parse_multipart()
+        return self.multipart_files
+
+    @property
+    def content_type(self):
+        return self.headers.get("content-type", "")
+
+    @property
+    def boundary(self) -> Optional[str]:
+        content_type = self.content_type
+        if "boundary=" not in content_type:
+            return None
+
+        try:
+            # safely extract boundary value
+            boundary_part = content_type.split("boundary=", 1)[1]
+            
+            # handle quoted boundary
+            if boundary_part.startswith('"'):
+                # find closing quote
+                end_quote = boundary_part.find('"', 1)
+                if end_quote != -1:
+                    boundary = boundary_part[1:end_quote]
+                else:
+                    boundary = boundary_part[1:]
+            else:
+                # handle unquoted boundary (split by semicolon or whitespace)
+                boundary = boundary_part.split(";")[0].split()[0]
+            
+            return boundary.strip()
+        
+        except Exception as e:
+            print(f"Error extracting boundary: {e}")
+            return None
+
 
 
 class HTTPResponse:
@@ -334,6 +502,24 @@ class HTTPServer:
             self.socket_buffers[fd] = b""
         except BlockingIOError:
             pass
+
+    def _request_complete(self, buffer: bytes) -> bool:
+        if b"\r\n\r\n" not in buffer:
+            return False
+        
+        header_end = buffer.find(b"\r\n\r\n")
+
+        headers = buffer[:header_end].decode("utf-8", errors="ignore")
+
+        body = buffer[header_end + 4:]
+        content_len = 0
+
+        for line in headers.split("\r\n"):
+            if line.lower().startswith("content-length:"):
+                content_len = int(line.split(":", -1)[1].strip())
+                break
+
+        return len(body) >= content_len
     
     # read data from client using socket_buffers buffer
     def _read_from_client(self, client_sock: socket.socket) -> None:
@@ -349,15 +535,17 @@ class HTTPServer:
             self.socket_buffers[fd] += data
             
             # Check if we have complete request (ends with \r\n\r\n)
-            if b'\r\n\r\n' in self.socket_buffers[fd]:
+            if self._request_complete(self.socket_buffers[fd]):
                 self._process_client_request(client_sock)
+            # if b'\r\n\r\n' in self.socket_buffers[fd]:
+            #     self._process_client_request(client_sock)
         except (OSError, ConnectionResetError):
             self._cleanup_client(client_sock)
     
     # parsing request from client and doing cleanup process after done (no persistent connection)
     def _process_client_request(self, client_sock: socket.socket) -> None:
         fd = client_sock.fileno()
-        request_data = self.socket_buffers[fd].decode('utf-8', errors='ignore')
+        request_data = self.socket_buffers[fd]
         
         # Parse request
         request = HTTPRequest.parse(request_data)
