@@ -3,7 +3,7 @@ import select
 import logging
 import time
 from typing import Tuple, Optional, Callable, Dict, Any
-from utils.packetheader import PacketHeader, FramedMessage, BufferedReader
+from app.utils.packetheader import PacketHeader, FramedMessage, BufferedReader
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +98,6 @@ class TCPSocket:
 
 
 class TCPServer:
-    """
-    TCP server using epoll for efficient multi-client handling.
-    Supports custom headers, message framing, and buffering.
-    """
-    
     # using select.epoll for multi-client handling, a class for the TCP server 
     # supports custom headers, message frmaing and buffering
     def __init__(self, host: str = "127.0.0.1", port: int = 5000,
