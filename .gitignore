@@ -1,4 +1,7 @@
 app/http/testing/*
 __pycache__
 .env
-
+venv/
+*.pyc
+nginx/ssl/
+.mypy_cache/

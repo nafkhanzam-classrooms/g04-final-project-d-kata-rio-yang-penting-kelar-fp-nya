@@ -1,16 +1,38 @@
-# main entry for the system
+import sys
+import logging
+from pathlib import Path
 
-from app.config.config import add_env_manual, load_dotenv
-from app.http.http_server import HTTPServer
-# from app.http.pptsharing.pptsharing_route import register_ppt_routes
-# from app.http.testing.testing_route import register_testing_routes
+root_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(root_dir))
 
-load_dotenv(__name__)
-# add_env_manual("UPLOAD_PATH", __name__)
+from app.http.http_server import CodEduServer, HTTPRequest, HTTPResponse, logging_middleware
+from app.controllers.user_controller import UserController
+from app.controllers.question_controller import QuestionController
 
-server = HTTPServer(port=8000)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
-# register_ppt_routes(server)
-# register_testing_routes(server)
+public_dir = root_dir / "public"
+server = CodEduServer(port=8080, static_dir=public_dir)
+server.use_middleware(logging_middleware)
 
-server.run()
+@server.get("/")
+def index(request: HTTPRequest) -> HTTPResponse:
+    request.path = "/index.html"
+    return server.serve_static(request)
+
+server.add_route("/api/user", "GET", UserController.get_profile)
+server.add_route("/api/submit", "POST", UserController.submit_code)
+server.add_route("/api/leaderboard", "GET", UserController.get_leaderboard)
+
+server.add_route("/api/questions", "GET", QuestionController.get_all_questions)
+server.add_route("/api/questions/:question_id", "GET", QuestionController.get_question)
+
+server.add_static_route("/css")
+server.add_static_route("/js")
+
+if __name__ == "__main__":
+    server.run()

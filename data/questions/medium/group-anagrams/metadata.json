@@ -1,0 +1,8 @@
+{
+    "id": "group-anagrams",
+    "title": "Group Anagrams",
+    "category": "String",
+    "difficulty": "Medium",
+    "url": "https://leetcode.com/problems/group-anagrams/",
+    "premium": false
+}

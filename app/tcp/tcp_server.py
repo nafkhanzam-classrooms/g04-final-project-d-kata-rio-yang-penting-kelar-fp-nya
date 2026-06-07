@@ -3,24 +3,26 @@ import select
 import logging
 import time
 from typing import Tuple, Optional, Callable, Dict, Any
+
 from utils.packetheader import PacketHeader, FramedMessage, BufferedReader
 
 logger = logging.getLogger(__name__)
 
+
 class TCPSocket:
-    # TCP custom socket wrapper class with optional custom header support
+    """
+    Wrapper for a TCP socket providing connection management, timeouts, and message framing.
+    """
     
-    def __init__(self, socket_obj: Optional[socket.socket] = None):
-        if socket_obj:
-            self.sock = socket_obj
-        else:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        
-        self.remote_addr = None
+    def __init__(self, socket_obj: Optional[socket.socket] = None) -> None:
+        self.sock: socket.socket = socket_obj or socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.remote_addr: Optional[Tuple[str, int]] = None
     
-    def connect(self, host: str, port: int, timeout: float = 10):
-        # conntect to the remote server using the tuple of hostname/IP and port, optional timeout value in seconds if the connections timed out, defaults to 10 seconds
-        if timeout:
+    def connect(self, host: str, port: int, timeout: Optional[float] = 10.0) -> None:
+        """
+        Establishes a connection to the specified host and port.
+        """
+        if timeout is not None:
             self.sock.settimeout(timeout)
         
         try:
@@ -34,28 +36,35 @@ class TCPSocket:
             logger.error(f"Connection failed to {host}:{port}: {e}")
             raise
         finally:
-            if timeout:
+            if timeout is not None:
                 self.sock.settimeout(None)
     
-    def send(self, data: bytes, timeout: float = 10) -> int:
-        # sends data in bytes with optional send timeout in seconds defaults by 10 seconds
-        if timeout:
+    def send(self, data: bytes, timeout: Optional[float] = 10.0) -> int:
+        """
+        Transmits raw byte data over the socket.
+        """
+        if timeout is not None:
             self.sock.settimeout(timeout)
         
         try:
-            sent = self.sock.sendall(data)
+            self.sock.sendall(data)
             logger.debug(f"Sent {len(data)} bytes")
             return len(data)
         except socket.timeout:
             logger.error("Send timeout")
             raise
+        except Exception as e:
+            logger.error(f"Send failed: {e}")
+            raise
         finally:
-            if timeout:
+            if timeout is not None:
                 self.sock.settimeout(None)
     
-    def recv(self, max_size: int = 4096, timeout: float = 10) -> bytes:
-        # receives data packet with maximum byte size that can be received, optional timeout value in seconds defaults by 10 secs
-        if timeout:
+    def recv(self, max_size: int = 4096, timeout: Optional[float] = 10.0) -> bytes:
+        """
+        Receives raw byte data up to max_size.
+        """
+        if timeout is not None:
             self.sock.settimeout(timeout)
         
         try:
@@ -64,33 +73,36 @@ class TCPSocket:
                 logger.debug(f"Received {len(data)} bytes")
             return data
         except socket.timeout:
-            logger.warning("Recv timeout")
+            logger.warning("Receive timeout")
+            raise
+        except Exception as e:
+            logger.error(f"Receive failed: {e}")
             raise
         finally:
-            if timeout:
+            if timeout is not None:
                 self.sock.settimeout(None)
     
-    def send_framed(self, data: bytes):
-        # send framed message, a wrapper function for the FramedMessage.frame, data is in bytes format
-        framed = FramedMessage.frame(data)
-        self.send(framed)
+    def send_framed(self, data: bytes) -> None:
+        """
+        Encapsulates and sends data as a framed message.
+        """
+        self.send(FramedMessage.frame(data))
     
     def get_remote_address(self) -> Optional[Tuple[str, int]]:
-        # get the remote address
         try:
             return self.sock.getpeername()
-        except:
+        except OSError:
             return None
     
-    def set_blocking(self, blocking: bool = False):
-        # set the blocking mode, defaults to false
+    def set_blocking(self, blocking: bool = False) -> None:
         self.sock.setblocking(blocking)
     
-    def close(self):
+    def close(self) -> None:
         try:
             self.sock.close()
-            logger.info(f"Socket closed ({self.remote_addr})")
-        except Exception as e:
+            if self.remote_addr:
+                logger.info(f"Socket closed ({self.remote_addr})")
+        except OSError as e:
             logger.error(f"Error closing socket: {e}")
     
     def get_fileno(self) -> int:
@@ -99,15 +111,12 @@ class TCPSocket:
 
 class TCPServer:
     """
-    TCP server using epoll for efficient multi-client handling.
-    Supports custom headers, message framing, and buffering.
+    Asynchronous TCP Server utilizing epoll for multiplexing.
+    Handles client connections, buffering, and framed message processing.
     """
     
-    # using select.epoll for multi-client handling, a class for the TCP server 
-    # supports custom headers, message frmaing and buffering
     def __init__(self, host: str = "127.0.0.1", port: int = 5000,
-                 backlog: int = 5, header: Optional[PacketHeader] = None):
-        # optional custom header format
+                 backlog: int = 5, header: Optional[PacketHeader] = None) -> None:
         self.host = host
         self.port = port
         self.header = header
@@ -121,48 +130,50 @@ class TCPServer:
         self.epoll = select.epoll()
         self.epoll.register(self.server_sock.fileno(), select.EPOLLIN)
         
-        # Track connected clients
-        self.clients = {}  # fd -> TCPSocket
-        self.buffers = {}  # fd -> BufferedReader
-        self.client_data = {}  # fd -> arbitrary client state dict
+        self.clients: Dict[int, TCPSocket] = {}
+        self.buffers: Dict[int, BufferedReader] = {}
+        self.client_data: Dict[int, Dict[str, Any]] = {}
         
-        # Callbacks
-        self.on_connect = None
-        self.on_disconnect = None
-        self.on_message = None  # For framed messages
-        self.on_data = None  # For raw data
+        self.on_connect: Optional[Callable[[int, Tuple[str, int]], None]] = None
+        self.on_disconnect: Optional[Callable[[int, Tuple[str, int]], None]] = None
+        self.on_message: Optional[Callable[[int, bytes], None]] = None
+        self.on_data: Optional[Callable[[int, bytes], None]] = None
         
         logger.info(f"TCP Server listening on {host}:{port}")
     
-    def register_callbacks(self, on_connect: Callable, 
-                          on_disconnect: Callable,
-                          on_message: Callable,
-                          on_data: Callable):
+    def register_callbacks(self, on_connect: Optional[Callable], 
+                           on_disconnect: Optional[Callable],
+                           on_message: Optional[Callable],
+                           on_data: Optional[Callable]) -> None:
+        """
+        Registers event callbacks for connection lifecycle and data reception.
+        """
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
         self.on_message = on_message
         self.on_data = on_data
     
-    def broadcast_message(self, message: bytes, sender_fd: int, exclude_fd: Optional[int] = None):
-        # broadcast a framed message to all clients that are connected
-        # exclude_fd to optionally exclude one client
-        framed = FramedMessage.frame(message)
+    def broadcast_message(self, message: bytes, sender_fd: Optional[int] = None, exclude_fd: Optional[int] = None) -> None:
+        """
+        Broadcasts a framed message to all connected clients, optionally excluding a specific client.
+        """
+        framed_data = FramedMessage.frame(message)
         
         for fd, client in self.clients.items():
-            if exclude_fd and fd == exclude_fd:
-                continue
-            if sender_fd and fd == sender_fd:
+            if fd in (exclude_fd, sender_fd):
                 continue
             
             try:
-                client.send(framed)
+                client.send(framed_data)
             except Exception as e:
                 logger.warning(f"Broadcast to {fd} failed: {e}")
     
-    def broadcast_data(self, data: bytes, exclude_fd: Optional[int] = None):
-        # broadcast raw data to all client, except for the optional excluded client in exclude_fd
+    def broadcast_data(self, data: bytes, exclude_fd: Optional[int] = None) -> None:
+        """
+        Broadcasts raw data to all connected clients.
+        """
         for fd, client in self.clients.items():
-            if exclude_fd and fd == exclude_fd:
+            if fd == exclude_fd:
                 continue
             
             try:
@@ -170,8 +181,7 @@ class TCPServer:
             except Exception as e:
                 logger.warning(f"Broadcast to {fd} failed: {e}")
     
-    def send_to_client(self, fd: int, message: bytes, framed: bool = True):
-        # send a message to a specific client
+    def send_to_client(self, fd: int, message: bytes, framed: bool = True) -> None:
         if fd not in self.clients:
             logger.warning(f"Client {fd} not found")
             return
@@ -186,88 +196,73 @@ class TCPServer:
             self._handle_disconnect(fd)
     
     def get_client_data(self, fd: int) -> Dict[str, Any]:
-        # get a client data, if exists will returned the client's fd, if not exists will returns an empty dict
-        if fd not in self.client_data:
-            self.client_data[fd] = {}
-        return self.client_data[fd]
+        return self.client_data.setdefault(fd, {})
     
-    def _handle_accept(self):
+    def _handle_accept(self) -> None:
         try:
             conn, addr = self.server_sock.accept()
             conn.setblocking(False)
             
             fd = conn.fileno()
-            tcp_sock = TCPSocket(conn)
-            
-            self.clients[fd] = tcp_sock
+            self.clients[fd] = TCPSocket(conn)
             self.buffers[fd] = BufferedReader(self.header)
             
             self.epoll.register(fd, select.EPOLLIN)
-            
             logger.info(f"Client accepted: {addr} (fd={fd})")
             
             if self.on_connect:
                 self.on_connect(fd, addr)
-        
         except Exception as e:
             logger.error(f"Accept error: {e}")
     
-    def _handle_disconnect(self, fd: int):
-        if fd not in self.clients:
+    def _handle_disconnect(self, fd: int) -> None:
+        client = self.clients.pop(fd, None)
+        if not client:
             return
         
-        addr = self.clients[fd].get_remote_address()
+        addr = client.get_remote_address()
         
         try:
             self.epoll.unregister(fd)
-        except:
+        except OSError:
             pass
         
-        try:
-            self.clients[fd].close()
-        except:
-            pass
-        
-        del self.clients[fd]
-        del self.buffers[fd]
-        
-        if fd in self.client_data:
-            del self.client_data[fd]
+        client.close()
+        self.buffers.pop(fd, None)
+        self.client_data.pop(fd, None)
         
         logger.info(f"Client disconnected: {addr} (fd={fd})")
         
-        if self.on_disconnect:
+        if self.on_disconnect and addr:
             self.on_disconnect(fd, addr)
     
-    def _handle_read(self, fd: int):
-        if fd not in self.clients:
+    def _handle_read(self, fd: int) -> None:
+        client = self.clients.get(fd)
+        if not client:
             return
         
         try:
-            data = self.clients[fd].recv()
-            
+            data = client.recv()
             if not data:
-                # Connection closed
                 self._handle_disconnect(fd)
                 return
             
             self.buffers[fd].feed(data)
             
-            # Process available messages
             if self.on_message:
-                messages = self.buffers[fd].read_all_framed_messages()
-                for msg in messages:
+                for msg in self.buffers[fd].read_all_framed_messages():
                     self.on_message(fd, msg)
             elif self.on_data:
                 self.on_data(fd, data)
-        
+                
         except Exception as e:
             logger.error(f"Read error from {fd}: {e}")
             self._handle_disconnect(fd)
     
-    def run(self, timeout: float = 1.0, max_events: int = 10):
-        # run the servver event loop and timeout the epool in seconds defaults to 1 second
-        # max_events sets the max processing iteration
+    def run(self, timeout: float = 1.0, max_events: int = 10) -> bool:
+        """
+        Executes a single iteration of the epoll event loop.
+        """
         try:
             events = self.epoll.poll(timeout, max_events)
             
@@ -280,57 +275,57 @@ class TCPServer:
                     self._handle_disconnect(fd)
             
             return True
-        
         except Exception as e:
             logger.error(f"Epoll error: {e}")
             return False
     
-    def run_forever(self, timeout: float = 1.0):
-        # wrapper to run function to run the server continously until interrupt from the user
+    def run_forever(self, timeout: float = 1.0) -> None:
+        """
+        Runs the epoll event loop continuously.
+        """
         logger.info("Server running (press Ctrl+C to stop)")
         try:
             while self.run(timeout):
                 pass
         except KeyboardInterrupt:
             logger.info("Server shutting down...")
+        finally:
             self.close()
     
-    def close(self):
-        # Close all clients
+    def close(self) -> None:
         for fd in list(self.clients.keys()):
             self._handle_disconnect(fd)
         
-        # Close epoll
         try:
             self.epoll.close()
-        except:
+        except OSError:
             pass
         
-        # Close server socket
         try:
             self.server_sock.close()
-        except:
+        except OSError:
             pass
         
         logger.info("Server closed")
 
 
 class TCPClient:
-    # simple TCP client with framing support and auto-reconnect
-    def __init__(self, host: str, port: int, auto_reconnect: bool = True):
-        # sets the auto-reconnect behavior and defaults to true
+    """
+    Robust TCP Client supporting auto-reconnection and message framing.
+    """
+    
+    def __init__(self, host: str, port: int, auto_reconnect: bool = True) -> None:
         self.host = host
         self.port = port
         self.auto_reconnect = auto_reconnect
         
-        self.socket: TCPSocket = TCPSocket()
+        self.socket = TCPSocket()
         self.connected = False
         self.buffer = BufferedReader()
         
         self._connect()
     
-    def _connect(self):
-        # connects to the TCP server
+    def _connect(self) -> None:
         try:
             self.socket.connect(self.host, self.port, timeout=5.0)
             self.connected = True
@@ -339,14 +334,13 @@ class TCPClient:
             logger.error(f"Connection failed: {e}")
             self.connected = False
     
-    def send_message(self, message: bytes):
-        # send framed message to the server
+    def send_message(self, message: bytes) -> None:
         if not self.connected and self.auto_reconnect:
             self._connect()
-        
+            
         if not self.connected:
             raise RuntimeError("Not connected")
-        
+            
         try:
             self.socket.send_framed(message)
         except Exception as e:
@@ -356,14 +350,13 @@ class TCPClient:
                 self._connect()
             raise
     
-    def send_data(self, data: bytes):
-        # send raw data bytes to the server
+    def send_data(self, data: bytes) -> None:
         if not self.connected and self.auto_reconnect:
             self._connect()
-        
+            
         if not self.connected:
             raise RuntimeError("Not connected")
-        
+            
         try:
             self.socket.send(data)
         except Exception as e:
@@ -372,8 +365,6 @@ class TCPClient:
             raise
     
     def recv_message(self, timeout: float = 5.0) -> Optional[bytes]:
-        # receives a single framed message and timed out with the default of 5 seconds
-        # using buffered per packet is 4096 bytes
         deadline = time.time() + timeout
         
         while time.time() < deadline:
@@ -384,7 +375,6 @@ class TCPClient:
                 data = self.socket.recv(4096, timeout=0.1)
                 
                 if not data:
-                    # Connection closed
                     self.connected = False
                     if self.auto_reconnect:
                         self._connect()
@@ -395,21 +385,22 @@ class TCPClient:
             except socket.timeout:
                 continue
             except Exception as e:
-                logger.error(f"Recv failed: {e}")
+                logger.error(f"Receive failed: {e}")
                 self.connected = False
                 raise
-        
+                
         return None
     
     def recv_data(self, max_size: int = 4096, timeout: float = 5.0) -> Optional[bytes]:
         try:
             return self.socket.recv(max_size, timeout)
         except Exception as e:
-            logger.error(f"Recv failed: {e}")
+            logger.error(f"Receive failed: {e}")
             self.connected = False
             raise
     
-    def close(self):
+    def close(self) -> None:
         if self.socket:
             self.socket.close()
         self.connected = False
+

@@ -1,0 +1,8 @@
+{
+    "id": "coin-change",
+    "title": "Coin Change",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "url": "https://leetcode.com/problems/coin-change/",
+    "premium": false
+}

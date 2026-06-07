@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CodEdu — Interactive competitive programming platform with real-time code evaluation, gamification, and live leaderboard.">
+    <meta name="theme-color" content="#09090b">
+    <title>CodEdu — Interactive Programming Platform</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="logo">CodEdu</div>
+        <ul class="nav-links">
+            <li><a href="#" class="active" data-view="problems" onclick="switchView('problems')">Problems</a></li>
+            <li><a href="#" data-view="workspace" onclick="switchView('workspace')">Workspace</a></li>
+            <li><a href="#" data-view="leaderboard" onclick="switchView('leaderboard')">Leaderboard</a></li>
+            <li><a href="#" data-view="discussion" onclick="switchView('discussion')">Discussion</a></li>
+        </ul>
+        <div class="user-profile">
+            <div class="connection-indicator" id="connection-indicator">
+                <span class="connection-dot disconnected" id="connection-status"></span>
+                <span class="connection-tooltip" id="connection-tooltip">Disconnected</span>
+            </div>
+
+            <div class="points-indicator" id="points-counter">
+                <span class="points-icon">⭐</span>
+                <span id="points-value">0</span>
+            </div>
+
+            <div class="streak-indicator" id="streak-counter">
+                <span class="streak-icon">🔥</span>
+                <span id="streak-value">0</span>
+            </div>
+
+            <div class="avatar">U</div>
+        </div>
+    </nav>
+
+    <main id="main-content">
+        <section id="view-problems" class="view active-view">
+            <div class="container">
+                <h1>Programming Challenges</h1>
+                <div class="problem-list" id="problem-list-container">
+                    <div class="loading-state">Loading questions...</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-workspace" class="view">
+            <div class="split-screen">
+                <div class="panel left-panel">
+                    <div class="panel-header" id="workspace-header">
+                        <h2 id="workspace-title">Select a problem</h2>
+                        <span id="workspace-difficulty" class="difficulty easy" style="display:none;"></span>
+                    </div>
+                    <div class="panel-content" id="workspace-content">
+                        <p class="empty-state">Please select a problem from the Problems list to start coding.</p>
+                    </div>
+                </div>
+
+                <div class="panel right-panel">
+                    <div class="editor-section">
+                        <div class="panel-header">
+                            <span>Code Editor (Python)</span>
+                            <button class="run-btn" id="btn-run-code">▶ Run Code</button>
+                        </div>
+                        <div class="editor-container">
+                            <div class="line-numbers" id="line-numbers">1</div>
+                            <textarea class="code-editor" id="code-editor" spellcheck="false" wrap="off" placeholder="# Write your Python solution here..."></textarea>
+                        </div>
+                    </div>
+                    <div class="terminal-section">
+                        <div class="panel-header">
+                            <span>Output / Terminal</span>
+                            <button class="clear-btn" id="btn-clear-terminal" onclick="document.querySelector('.terminal-output').textContent=''">Clear</button>
+                        </div>
+                        <div class="terminal-output" id="terminal-output"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-leaderboard" class="view">
+            <div class="container">
+                <h1>🏆 Leaderboard</h1>
+                <div class="leaderboard-header-row">
+                    <span class="lb-rank">Rank</span>
+                    <span class="lb-name">Username</span>
+                    <span class="lb-points">Points</span>
+                    <span class="lb-streak">Streak</span>
+                    <span class="lb-solved">Solved</span>
+                </div>
+                <div id="leaderboard-list" class="leaderboard-list">
+                    <div class="loading-state">Loading leaderboard...</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-discussion" class="view">
+            <div class="container">
+                <div class="discussion-header">
+                    <h2>Discussion</h2>
+                    <button class="new-post-btn">+ New Post</button>
+                </div>
+                <div class="post-list">
+                    <div class="post-card">
+                        <div class="post-author">User123</div>
+                        <div class="post-content">
+                            <h4>Why is my socket blocking?</h4>
+                            <p>I tried using socket.recv(1024) but it just hangs forever. Any tips?</p>
+                        </div>
+                        <div class="post-meta">2 replies • 1 hr ago</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="streak-modal" id="streak-modal">
+        <div class="streak-modal-content">
+            <div class="streak-modal-icon">🔥</div>
+            <h2>Streak Bonus!</h2>
+            <p>You solved a new problem today and kept your streak alive!</p>
+            <p id="streak-modal-details" class="streak-modal-bonus"></p>
+            <button class="streak-modal-btn" onclick="closeStreakModal()">Awesome!</button>
+        </div>
+    </div>
+
+    <script src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+    "id": "rotate-image",
+    "title": "Rotate Image",
+    "category": "Matrix",
+    "difficulty": "Medium",
+    "url": "https://leetcode.com/problems/rotate-image/",
+    "premium": false
+}
