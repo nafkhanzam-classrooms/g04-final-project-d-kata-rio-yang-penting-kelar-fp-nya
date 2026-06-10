@@ -29,6 +29,12 @@ def ensure_upload_dir_exists() -> Path:
 
 UPLOAD_DIR: Path = ensure_upload_dir_exists()
 
+def handle_index(request: HTTPRequest) -> HTTPResponse:
+    html_path = Path(__file__).parent.parent.parent.parent / "public" / "index.html"
+    with open(html_path, "r") as f:
+        html = f.read()
+    return HTTPResponse(200, html.encode(), "text/html")
+
 def register_ppt_routes(server: HTTPServer) -> None:
     #Register all PPT-related routes on the given HTTPServer instance.
     # 
@@ -49,6 +55,6 @@ def register_ppt_routes(server: HTTPServer) -> None:
     server.add_route("/api/ppt/slides/:num/image",   "GET",   handle_slide_image_bynum)
     server.add_route("/api/ppt/presenter/join",      "POST",  handle_presenter_join)
     server.add_route("/api/ppt/presenter",           "GET",   handle_get_presenter)
+    server.add_route("/", "GET", handle_index)
  
     print("[PPT-ROUTES] Registered PPT routes.")
-
