@@ -1,0 +1,169 @@
+from typing import Dict
+from app.http.http_server import HTTPRequest, HTTPResponse, HTTPServer
+from app.controllers.pptsharing.ppt_manager import PPTManager
+import os
+import json
+from pathlib import Path
+
+_manager = PPTManager()
+
+def json_ok(data: dict, status: int = 200) -> HTTPResponse:
+    return HTTPResponse.json({"ok": True, **data}, status)
+
+def json_error(message: str, status: int = 400) -> HTTPResponse:
+    return HTTPResponse.json({"error": message}, status)
+
+def handle_upload(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
+    files = request.files()
+    if not files:
+        return json_error("No file uploaded, Use multipart/form-data with field 'file'.")
+
+    ppt_file = next(
+        (f for f in files if f.filename.lower().endswith(".pptx")),
+        None,
+    )
+
+    if ppt_file is None:
+        return json_error("Uploaded file must be a .pptx file")
+
+    safe_name = Path(ppt_file.filename).name
+    if not safe_name:
+        return json_error("Invalid filename")
+
+    dest = upload_dir / safe_name
+    ppt_file.save(str(dest))
+
+    return json_ok({"filename": safe_name, "size": len(ppt_file.data)}, 201)
+
+def handle_list_files(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
+    try:
+        files = [
+            f.name for f in upload_dir.iterdir() if f.suffix.lower() == '.pptx'
+        ]
+        
+        return HTTPResponse.json({"files" : sorted(files)})
+    except Exception as exc:
+        return json_error(str(exc), 500)
+
+def handle_load(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
+    try:
+        body: Dict = request.json()
+        filename: str = body.get("filename", "").strip()
+    except Exception:
+        return json_error("Body must be JSON with key 'filename'")
+
+    if not filename:
+        return json_error("'filename' is required")
+
+    filepath = upload_dir / Path(filename).name
+    if not filepath.exists():
+        return json_error(f"File {filename} cannot be found", 404)
+    
+    ok, info = _manager.load(str(filepath))
+    if not ok or info is None:
+        return json_error("Failed to load presentation", 500)
+
+    return json_ok(info)
+
+def handle_slide_count(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    return HTTPResponse.json({"total_slides": _manager.total_slides})
+
+def handle_get_current_slideno(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    return HTTPResponse.json({"slide": _manager.current_slideno})
+
+def handle_goto_slide(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+    
+    try:
+        body: Dict = request.json()
+        slide: int = int(body.get("slide", 0))
+    except Exception:
+        return json_error("Body must contain JSON with 'slide' key")
+
+    if slide < 1 or slide > _manager.total_slides:
+        return json_error(f"Slide number is invaild! {slide}/{_manager.total_slides}")
+
+    ok = _manager.goto_slide(slide - 1) # convert to 0-based
+    if not ok:
+        return json_error(f"Failed to navigate to slide no. {slide}", 500)
+    
+    return json_ok({"slide": _manager.current_slideno + 1})
+
+def handle_next_slide(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    ok = _manager.next_slide()
+    if not ok:
+        return json_error("Already on the last slide", 400)
+
+    return json_ok({"slide": _manager.current_slideno + 1})
+
+def handle_prev_slide(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    ok = _manager.prev_slide()
+    if not ok:
+        return json_error("Already on the first slide", 400)
+
+    return json_ok({"slide": _manager.current_slideno + 1})
+
+def handle_current_slide(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    data = _manager.get_current_slide_bytes()
+    if not data:
+        return json_error("Slide image not available", 500)
+
+    return HTTPResponse(200, data, "image/jpeg")
+
+def handle_slide_image_bynum(request: HTTPRequest, num: str) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
+
+    try:
+        slide_1based = int(num)
+    except ValueError:
+        return json_error("Slide number must be an integer")
+
+    if slide_1based < 1 or slide_1based > _manager.total_slides:
+        return json_error(f"Slide number is not valid {slide_1based}/{_manager.total_slides}", 404)
+
+    data = _manager.get_slide_bytes(slide_1based - 1)
+    if not data:
+        return json_error("Slide image not available", 500)
+
+    return HTTPResponse(200, data, "image/jpeg")
+
+def handle_presenter_join(request: HTTPRequest) -> HTTPResponse:
+    try:
+        body: Dict = request.json()
+        name: str = body.get("name", "").strip()
+    except Exception:
+        return json_error("Body must be JSON with 'name' key exists")
+
+    if not name:
+        return json_error("'name' is required")
+
+    client_addr = getattr(request, "client_addr", None) or ("unknown", 0)
+    synthetic_fd = hash(client_addr) & 0xFFFF
+
+    _manager.set_presenter(synthetic_fd, name)
+    return json_ok({"presenter": name})
+
+def handle_get_presenter(request: HTTPRequest) -> HTTPResponse:
+    if _manager.presenter_name:
+        return HTTPResponse.json({"presenter": _manager.presenter_name})
+
+    return HTTPResponse.json({"presenter": None})
+
+

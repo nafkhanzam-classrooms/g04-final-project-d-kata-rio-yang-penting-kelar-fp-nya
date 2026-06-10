@@ -2,7 +2,7 @@ from typing import cast, Dict, List, Optional, Tuple
 import os
 import io
 
-from pptx import Presentation
+from pptx import Presentation as open_presentation
 from pptx.presentation import Presentation
 from pptx.util import Inches
 from pptx.util import Pt
@@ -41,7 +41,7 @@ class PPTProcessor:
                 print(f"[PPTProcessor] File not found: {filepath}")
                 return False
 
-            prs = Presentation(filepath)
+            prs: Presentation = open_presentation(filepath)
             self.total_slides = len(prs.slides)
             self.current_slide = 0
             self.loaded_file = filepath
@@ -129,6 +129,9 @@ class PPTProcessor:
 
     def _render_python_fallback(self, prs: Presentation, slide_idx: int) -> bytes:
         slide = prs.slides[slide_idx]
+
+        w_emu: int = 0
+        h_emu: int = 0
 
         try:
             w_emu: int = int(prs.slide_width  or 9144000)
