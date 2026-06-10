@@ -121,7 +121,7 @@ class HTTPRequest:
                     
                     # Parse Content-Disposition header
                     if line_lower.startswith("content-disposition:"):
-                        self._parse_content_disposition(line, field_name, filename)
+                        # self._parse_content_disposition(line, field_name, filename)
                         field_name, filename = self._extract_disposition_params(line)
                     
                     # Parse Content-Type header
