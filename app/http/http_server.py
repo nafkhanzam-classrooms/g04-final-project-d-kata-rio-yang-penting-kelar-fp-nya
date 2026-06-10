@@ -446,6 +446,12 @@ class HTTPServer:
     # if the handler response is None, 204 will be returned
     # if there are errors in the function, 500 will be returned
     def _handle_request_impl(self, request: HTTPRequest) -> HTTPResponse:
+        if self.static_dir:
+            static_resp = self.serve_static(request)
+
+            if static_resp.status != 404:
+                return static_resp
+
         # Apply middleware
         response = self._apply_middleware(request)
         if response is not None:
