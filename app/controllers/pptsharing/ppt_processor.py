@@ -1,6 +1,10 @@
 from typing import cast, Dict, List, Optional, Tuple
 import os
 import io
+import shutil
+import tempfile
+import subprocess
+import threading
 
 from pptx import Presentation as open_presentation
 from pptx.presentation import Presentation
@@ -14,6 +18,8 @@ from pptx.shapes.shapetree import SlideShapes
 from pptx.shapes.autoshape import Shape
 from PIL import Image
 from PIL import ImageDraw, ImageFont
+
+from app.utils.convert_ppt_to_pptx import util_convert_ppt_to_pptx
 
 try:
     import subprocess
@@ -33,40 +39,69 @@ class PPTProcessor:
         self.total_slides: int = 0
         self.current_slide: int = 0
         self.slide_cache: Optional[List[bytes]] = []
+
+        self.pdf_path:     Optional[str] = None   # path to converted PDF
+        self.pdf_tmpdir:   Optional[str] = None   # temp dir holding PDF file converted
         
-        
+
     def load_file(self, filepath: str) -> bool:
         try:
             if not os.path.isfile(filepath):
-                print(f"[PPTProcessor] File not found: {filepath}")
                 return False
 
-            prs: Presentation = open_presentation(filepath)
+            actual_path = filepath
+            if self.pdf_tmpdir:
+                shutil.rmtree(self.pdf_tmpdir, ignore_errors=True)
+                self.pdf_tmpdir = None
+                self.pdf_path   = None
+ 
+            actual_path = filepath
+            if filepath.lower().endswith(".ppt"):
+                converted = util_convert_ppt_to_pptx(filepath)
+                if converted is None:
+                    return False
+                actual_path = converted
+
+
+            prs: Presentation = open_presentation(actual_path)
             self.total_slides = len(prs.slides)
             self.current_slide = 0
             self.loaded_file = filepath
-            self.slide_cache = []
+            self.slide_cache = [b""] * self.total_slides  # pre-allocate slots
 
-            for idx in range(self.total_slides):
-                jpeg_bytes = self._render_slide(prs=prs, slide_idx=idx)
-                self.slide_cache.append(jpeg_bytes)
+            # Render slides in background so load_file returns immediately
+            def render_all() -> None:
+                # convert to PDF once (LibreOffice)
+                if _HAS_LIBREOFFICE:
+                    self.pdf_path, self.pdf_tmpdir = self._convert_to_pdf(actual_path)
+ 
+                # render each slide
+                for idx in range(self.total_slides):
+                    self.slide_cache[idx] = self._render_slide(prs, idx)
+                    print(f"[PPTProcessor] Rendered slide {idx + 1}/{self.total_slides}")
 
 
-            print(
-                f"[PPTProcessor] Loaded '{filepath}' "
-                f"({self.total_slides} slides)"
-            )
+            thread = threading.Thread(target=render_all, daemon=True)
+            thread.start()
+
+            print(f"[PPTProcessor] Loaded '{filepath}' ({self.total_slides} slides), rendering in background")
             return True
+
         except Exception as exc:
             print(f"[PPTProcessor] load_file error: {exc}")
             self.loaded_file = None
             self.total_slides = 0
             self.slide_cache = []
-            return False
-
+            return False 
 
     def extract_slide(self, slide_num: int) -> bytes:
-        return b""
+        if not self.slide_cache:
+            return b""
+
+        if slide_num < 0 or slide_num >= len(self.slide_cache):
+            return b""
+
+        return self.slide_cache[slide_num]
 
     def get_total_slides(self) -> int:
         return self.total_slides
@@ -75,59 +110,116 @@ class PPTProcessor:
         return self.current_slide
 
     def next(self) -> bool:
+        if self.total_slides == 0:
+            return False
+
+        if self.current_slide >= self.total_slides - 1:
+            return False
+
+        self.current_slide += 1
         return True
     
     def prev(self) -> bool:
+        if self.total_slides == 0:
+            return False
+
+        if self.current_slide <= 0:
+            return False
+
+        self.current_slide -= 1
         return True
 
     def goto_slide(self, slideno: int) -> bool:
+        if slideno < 0 or slideno >= self.total_slides:
+            return False
+
+        self.current_slide = slideno
         return True
 
     def _render_slide(self, prs: Presentation, slide_idx: int) -> bytes:
         if _HAS_LIBREOFFICE and self.loaded_file:
-            result = self._render_via_libreoffice(slide_idx)
+            result = self._render_via_pdf(slide_idx)
             if result:
                 return result
 
-        return self._render_slide(prs=prs, slide_idx=slide_idx)
+        return self._render_python_fallback(prs=prs, slide_idx=slide_idx)
 
-    def _render_via_libreoffice(self, slide_idx: int) -> Optional[bytes]:
-        import subprocess
-        import tempfile
-        import glob
 
-        if self.loaded_file is None:
-            return None
+    def get_render_status(self) -> dict:
+        rendered = sum(1 for s in (self.slide_cache or []) if s != b"")
+        return {
+            "total":    self.total_slides,
+            "rendered": rendered,
+            "ready":    rendered == self.total_slides,
+        }
 
+
+    def _convert_to_pdf(self, filepath: str) -> tuple:
         try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                result = (
-                    subprocess.run(
-                        ["libreoffice", "--headless", "--convert-to", "png", "--outdir", tmpdir, self.loaded_file], 
-                        capture_output=True, 
-                        timeout=60
-                    )
-                )
-
-                if result.returncode != 0:
-                    return None
-
-                pattern = os.path.join(tmpdir, "*.png")
-                pages = sorted(glob.glob(pattern))
-
-                if slide_idx >= len(pages):
-                    return None
-
-                img = Image.open(pages[slide_idx]).convert("RGB")
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=RENDER_QUALITY)
-                return buf.getvalue()
+            tmpdir = tempfile.mkdtemp(prefix="pptprocessor_")
+            result = subprocess.run(
+                [
+                    "libreoffice", "--headless",
+                    f"-env:UserInstallation=file://{tmpdir}/lo_profile",
+                    "--convert-to", "pdf",
+                    "--outdir", tmpdir,
+                    filepath,
+                ],
+                capture_output=True,
+                timeout=120,
+            )
+ 
+            print(f"[LibreOffice] returncode: {result.returncode}")
+            if result.stderr:
+                print(f"[LibreOffice] stderr: {result.stderr.decode()}")
+ 
+            if result.returncode != 0:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                return None, None
+ 
+            from pathlib import Path
+            pdf_path = os.path.join(tmpdir, Path(filepath).stem + ".pdf")
+            if not os.path.exists(pdf_path):
+                print(f"[LibreOffice] PDF not found at: {pdf_path}")
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                return None, None
+ 
+            print(f"[LibreOffice] PDF ready: {pdf_path}")
+            return pdf_path, tmpdir
+ 
         except Exception as exc:
-            print(f"[PPTProcessor] Libreoffice render error: {exc}")
+            print(f"[PPTProcessor] PDF conversion error: {exc}")
+            return None, None
+
+    def _render_via_pdf(self, slide_idx: int) -> Optional[bytes]:
+        """Render a slide by extracting the corresponding page from the PDF."""
+        from pdf2image import convert_from_path
+ 
+        if not self.pdf_path or not os.path.exists(self.pdf_path):
             return None
+ 
+        try:
+            images = convert_from_path(
+                self.pdf_path,
+                dpi=150,
+                first_page=slide_idx + 1,
+                last_page=slide_idx + 1,
+            )
+            if not images:
+                return None
+ 
+            buf = io.BytesIO()
+            images[0].save(buf, format="JPEG", quality=RENDER_QUALITY)
+            return buf.getvalue()
+ 
+        except Exception as exc:
+            print(f"[PPTProcessor] pdf2image render error (slide {slide_idx}): {exc}")
+            return None
+
 
 
     def _render_python_fallback(self, prs: Presentation, slide_idx: int) -> bytes:
+        print(f"[PPTProcessor] Rendering slide {slide_idx} via Python fallback")
         slide = prs.slides[slide_idx]
 
         w_emu: int = 0
@@ -215,4 +307,7 @@ class PPTProcessor:
 
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=RENDER_QUALITY)
+
+
+        print(f"[PPTProcessor] Slide {slide_idx} rendered, size: {len(buf.getvalue())} bytes")
         return buf.getvalue()

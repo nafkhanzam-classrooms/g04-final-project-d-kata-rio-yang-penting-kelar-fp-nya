@@ -1,6 +1,6 @@
 import struct
 from enum import IntEnum
-from utils.packetheader import PacketHeader
+from app.utils.packetheader import PacketHeader
 
 SLIDE_CHUNK_SIZE: int = 8192
 

@@ -5,6 +5,8 @@ import os
 import json
 from pathlib import Path
 
+from app.utils.sanitize_filename import sanitize_filename
+
 _manager = PPTManager()
 
 def json_ok(data: dict, status: int = 200) -> HTTPResponse:
@@ -19,14 +21,14 @@ def handle_upload(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
         return json_error("No file uploaded, Use multipart/form-data with field 'file'.")
 
     ppt_file = next(
-        (f for f in files if f.filename.lower().endswith(".pptx")),
+        (f for f in files if f.filename.lower().endswith((".pptx", ".ppt"))),
         None,
     )
 
     if ppt_file is None:
         return json_error("Uploaded file must be a .pptx file")
 
-    safe_name = Path(ppt_file.filename).name
+    safe_name = sanitize_filename(ppt_file.filename)
     if not safe_name:
         return json_error("Invalid filename")
 
@@ -38,7 +40,7 @@ def handle_upload(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
 def handle_list_files(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     try:
         files = [
-            f.name for f in upload_dir.iterdir() if f.suffix.lower() == '.pptx'
+            f.name for f in upload_dir.iterdir() if f.suffix.lower() in ('.pptx', '.ppt')
         ]
         
         return HTTPResponse.json({"files" : sorted(files)})
@@ -116,7 +118,7 @@ def handle_prev_slide(request: HTTPRequest) -> HTTPResponse:
 
     return json_ok({"slide": _manager.current_slideno + 1})
 
-def handle_current_slide(request: HTTPRequest) -> HTTPResponse:
+def handle_current_slide_image(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
 

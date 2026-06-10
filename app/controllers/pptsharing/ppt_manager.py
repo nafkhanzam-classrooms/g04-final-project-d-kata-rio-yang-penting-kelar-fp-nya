@@ -53,7 +53,7 @@ class PPTManager:
         self.presenter_fd = presenter_fd
         self.presenter_name = presenter_name
 
-        if presenter_fd in self.viewer_fds
+        if presenter_fd in self.viewer_fds:
             self.viewer_fds.remove(presenter_fd)
 
     # role management add viewer role
