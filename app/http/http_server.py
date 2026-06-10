@@ -40,7 +40,7 @@ class HTTPRequest:
 
             print(header_block)
             print("\n\n")
-            print(body)
+            # print(body)
             lines = header_block.split('\r\n')
             
             if not lines:
