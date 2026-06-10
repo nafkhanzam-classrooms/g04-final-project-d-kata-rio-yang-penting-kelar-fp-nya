@@ -222,7 +222,7 @@ def parse_join_presenter_payload(data: bytes) -> str:
     name_len = struct.unpack(">H", data[:2])[0]
     return data[2:2+name_len].decode('utf-8')
 
-# 
+# custom header for handling the transmission of the image
 
 def build_slide_image_start(slide_num: int, total_bytes: int, total_chunks: int) -> bytes:
     # format: [slide_num][total_bytes][total_chunks], short int int

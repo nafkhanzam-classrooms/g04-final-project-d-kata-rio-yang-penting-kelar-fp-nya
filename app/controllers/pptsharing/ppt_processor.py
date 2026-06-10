@@ -94,6 +94,7 @@ class PPTProcessor:
             self.slide_cache = []
             return False 
 
+    # returns the bytes of the images of a specific slide num
     def extract_slide(self, slide_num: int) -> bytes:
         if not self.slide_cache:
             return b""
@@ -103,12 +104,15 @@ class PPTProcessor:
 
         return self.slide_cache[slide_num]
 
+    # getter for the current file total slides count
     def get_total_slides(self) -> int:
         return self.total_slides
 
+    # getter for the current position of the slide
     def get_current_slideno(self) -> int:
         return self.current_slide
 
+    # utility to switch slide to the next one, fails if the slide no already in the end
     def next(self) -> bool:
         if self.total_slides == 0:
             return False
@@ -119,6 +123,7 @@ class PPTProcessor:
         self.current_slide += 1
         return True
     
+    # the same as the next(), this is the reverse
     def prev(self) -> bool:
         if self.total_slides == 0:
             return False
@@ -129,6 +134,7 @@ class PPTProcessor:
         self.current_slide -= 1
         return True
 
+    # to jump from a slide to the requested slide no
     def goto_slide(self, slideno: int) -> bool:
         if slideno < 0 or slideno >= self.total_slides:
             return False
@@ -136,6 +142,9 @@ class PPTProcessor:
         self.current_slide = slideno
         return True
 
+    # internal function to render each of the slide image,
+    # if libreoffice is available, will use libreoffice
+    # otherwise fallbacks to python-pptx (minimal loader)
     def _render_slide(self, prs: Presentation, slide_idx: int) -> bytes:
         if _HAS_LIBREOFFICE and self.loaded_file:
             result = self._render_via_pdf(slide_idx)
@@ -145,6 +154,7 @@ class PPTProcessor:
         return self._render_python_fallback(prs=prs, slide_idx=slide_idx)
 
 
+    # for information of the render status
     def get_render_status(self) -> dict:
         rendered = sum(1 for s in (self.slide_cache or []) if s != b"")
         return {
@@ -154,6 +164,9 @@ class PPTProcessor:
         }
 
 
+    # converts the PPTX/PPT into PDF first, since libreoffice directly converting to images will not work or causing troubles
+    # using subprocess, make sure libreoffice is installed
+    # if not, the rendered PPT will only be text-only, no fancy graphics like images
     def _convert_to_pdf(self, filepath: str) -> tuple:
         try:
             tmpdir = tempfile.mkdtemp(prefix="pptprocessor_")
@@ -191,8 +204,10 @@ class PPTProcessor:
             print(f"[PPTProcessor] PDF conversion error: {exc}")
             return None, None
 
+    # using pdf2image to convert each of the presentation slides into JPEG image format
+    # using the pdf2image library installed from the pip
     def _render_via_pdf(self, slide_idx: int) -> Optional[bytes]:
-        """Render a slide by extracting the corresponding page from the PDF."""
+        # Render a slide by extracting the corresponding page from the PDF.
         from pdf2image import convert_from_path
  
         if not self.pdf_path or not os.path.exists(self.pdf_path):
@@ -216,8 +231,8 @@ class PPTProcessor:
             print(f"[PPTProcessor] pdf2image render error (slide {slide_idx}): {exc}")
             return None
 
-
-
+    # this using python-pptx will only render text and no images
+    # this will likely to be called if the libreoffice not failed to converts the file
     def _render_python_fallback(self, prs: Presentation, slide_idx: int) -> bytes:
         print(f"[PPTProcessor] Rendering slide {slide_idx} via Python fallback")
         slide = prs.slides[slide_idx]

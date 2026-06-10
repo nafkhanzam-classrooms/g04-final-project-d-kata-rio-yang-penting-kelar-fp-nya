@@ -9,12 +9,15 @@ from app.utils.sanitize_filename import sanitize_filename
 
 _manager = PPTManager()
 
+# helper function to respond quickly if JSON is preferred
 def json_ok(data: dict, status: int = 200) -> HTTPResponse:
     return HTTPResponse.json({"ok": True, **data}, status)
 
 def json_error(message: str, status: int = 400) -> HTTPResponse:
     return HTTPResponse.json({"error": message}, status)
 
+# handling upload using multipart/form-data that only accepts .pptx or .ppt
+# POST /api/ppt/upload
 def handle_upload(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     files = request.files()
     if not files:
@@ -28,15 +31,19 @@ def handle_upload(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     if ppt_file is None:
         return json_error("Uploaded file must be a .pptx file")
 
+    # safe renaming the file if contains any space, utilizing the sanitize_filename imported from util
     safe_name = sanitize_filename(ppt_file.filename)
     if not safe_name:
         return json_error("Invalid filename")
 
+    # saves the ppt file into the upload_dir passed by the function argument
     dest = upload_dir / safe_name
     ppt_file.save(str(dest))
 
     return json_ok({"filename": safe_name, "size": len(ppt_file.data)}, 201)
 
+# list all ppt or pptx file inside the public/uploads
+# GET /api/ppt/files
 def handle_list_files(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     try:
         files = [
@@ -47,6 +54,10 @@ def handle_list_files(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     except Exception as exc:
         return json_error(str(exc), 500)
 
+# handling when request is trying to load a ppt file that already uploaded
+# and to be converted by the PPTManager
+
+# POST /api/ppt/load
 def handle_load(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
     try:
         body: Dict = request.json()
@@ -67,18 +78,24 @@ def handle_load(request: HTTPRequest, upload_dir: Path) -> HTTPResponse:
 
     return json_ok(info)
 
+# returns the total slides from the loaded PPT
+# GET /api/ppt/slides/count
 def handle_slide_count(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
 
     return HTTPResponse.json({"total_slides": _manager.total_slides})
 
+# returns the current slide no. in the PPTManager
+# GET /api/ppt/slides/current
 def handle_get_current_slideno(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
 
     return HTTPResponse.json({"slide": _manager.current_slideno})
 
+# handler for changing the slide no to a number
+# POST /api/ppt/slides/goto
 def handle_goto_slide(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
@@ -98,6 +115,8 @@ def handle_goto_slide(request: HTTPRequest) -> HTTPResponse:
     
     return json_ok({"slide": _manager.current_slideno + 1})
 
+# handler for changing the slide no to the next
+# POST /api/ppt/slides/next
 def handle_next_slide(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
@@ -108,6 +127,8 @@ def handle_next_slide(request: HTTPRequest) -> HTTPResponse:
 
     return json_ok({"slide": _manager.current_slideno + 1})
 
+# handler for changing the slide no to the previous
+# POST /api/ppt/slides/prev
 def handle_prev_slide(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
@@ -118,6 +139,8 @@ def handle_prev_slide(request: HTTPRequest) -> HTTPResponse:
 
     return json_ok({"slide": _manager.current_slideno + 1})
 
+# jhandler for transmitting the image slide to the client / presenter
+# GET /api/ppt/slides/image
 def handle_current_slide_image(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
@@ -128,6 +151,8 @@ def handle_current_slide_image(request: HTTPRequest) -> HTTPResponse:
 
     return HTTPResponse(200, data, "image/jpeg")
 
+# handler for transmitting image slide but custom slide number to client / presenter
+# GET /api/ppt/slides/:num/image, :num is passed down into the request parameter
 def handle_slide_image_bynum(request: HTTPRequest, num: str) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
@@ -146,6 +171,8 @@ def handle_slide_image_bynum(request: HTTPRequest, num: str) -> HTTPResponse:
 
     return HTTPResponse(200, data, "image/jpeg")
 
+# sets the presenter name and file descriptor (addr or ID)
+# POST /api/ppt/presenter/join
 def handle_presenter_join(request: HTTPRequest) -> HTTPResponse:
     try:
         body: Dict = request.json()
@@ -162,10 +189,16 @@ def handle_presenter_join(request: HTTPRequest) -> HTTPResponse:
     _manager.set_presenter(synthetic_fd, name)
     return json_ok({"presenter": name})
 
+# get the name of the presenter
+# /api/ppt/presenter
 def handle_get_presenter(request: HTTPRequest) -> HTTPResponse:
     if _manager.presenter_name:
         return HTTPResponse.json({"presenter": _manager.presenter_name})
 
     return HTTPResponse.json({"presenter": None})
 
+def handle_get_presentation_filename(request: HTTPRequest) -> HTTPResponse:
+    if not _manager.current_file:
+        return json_error("No presentation file loaded", 404)
 
+    return json_ok({"ppt_name": _manager.current_file})
