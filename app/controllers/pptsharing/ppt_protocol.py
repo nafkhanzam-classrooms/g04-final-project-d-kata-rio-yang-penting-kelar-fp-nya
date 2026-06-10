@@ -2,6 +2,8 @@ import struct
 from enum import IntEnum
 from utils.packetheader import PacketHeader
 
+SLIDE_CHUNK_SIZE: int = 8192
+
 class TCPCommand(IntEnum):
     # Enum for custom TCP command messages for the PPT sharing protocol
     # used from client to server
@@ -120,6 +122,7 @@ def parse_load_file_payload(data: bytes) -> str:
     filename = data[2:2+name_len].decode('utf-8')
     return filename
 
+# for go to slide num N
 
 def build_go_to_slide_payload(slide_num: int) -> bytes:
     # header format: [slide num]
@@ -131,6 +134,7 @@ def parse_go_to_slide_payload(data: bytes) -> int:
         raise ValueError("Invalid go_to_slide payload")
     return struct.unpack(">H", data[:2])[0]
 
+# information for slide total count
 
 def build_slide_count_response(count: int) -> bytes:
     return struct.pack(">H", count)
@@ -141,6 +145,7 @@ def parse_slide_count_response(data: bytes) -> int:
         raise ValueError("Invalid slide_count response")
     return struct.unpack(">H", data[:2])[0]
 
+# information for current slide
 
 def build_current_slide_response(slide_num: int) -> bytes:
     return struct.pack(">H", slide_num)
@@ -151,6 +156,7 @@ def parse_current_slide_response(data: bytes) -> int:
         raise ValueError("Invalid current_slide response")
     return struct.unpack(">H", data[:2])[0]
 
+# for file listing
 
 def build_file_list_response(filenames: list) -> bytes:
     # Format: [2-byte count][filename1_len:filename1][filename2_len:filename2]...
@@ -181,11 +187,13 @@ def parse_file_list_response(data: bytes) -> list:
     
     return filenames
 
+# for slide changed (slide num)
 
 def build_slide_changed_response(slide_num: int) -> bytes:
     return struct.pack(">H", slide_num)
 
 
+# make the struct for presenter info response
 def build_presenter_info_response(presenter_name: str) -> bytes:
     name_bytes = presenter_name.encode('utf-8')
     return struct.pack(">H", len(name_bytes)) + name_bytes
@@ -207,7 +215,6 @@ def build_join_presenter_payload(client_name: str) -> bytes:
     name_bytes = client_name.encode('utf-8')
     return struct.pack(">H", len(name_bytes)) + name_bytes
 
-
 def parse_join_presenter_payload(data: bytes) -> str:
     # unpacks header to extract the join_presenter payload
     if len(data) < 2:
@@ -215,15 +222,17 @@ def parse_join_presenter_payload(data: bytes) -> str:
     name_len = struct.unpack(">H", data[:2])[0]
     return data[2:2+name_len].decode('utf-8')
 
+# 
+
 def build_slide_image_start(slide_num: int, total_bytes: int, total_chunks: int) -> bytes:
     # format: [slide_num][total_bytes][total_chunks], short int int
     return struct.pack(">HII", slide_num, total_bytes, total_chunks)
 
 def parse_slide_image_start(data: bytes) -> tuple:
     # parse or unpacks the build_slide_image_start payload
-    if len(data) < 8:
+    if len(data) < 10:
         raise ValueError("Invalid slide_image_start payload")
-    slide_num, total_bytes, total_chunks = struct.unpack(">HII", data[:8])
+    slide_num, total_bytes, total_chunks = struct.unpack(">HII", data[:10])
     return slide_num, total_bytes, total_chunks
 
 def build_slide_image_chunk(chunk_id: int, chunk_data: bytes) -> bytes:
