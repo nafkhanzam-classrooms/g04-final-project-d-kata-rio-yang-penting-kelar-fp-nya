@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlideShare — PPT Viewer</title>
+<link rel="stylesheet" href="/css/pptsharing/main.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+      </svg>
+      SlideShare
+    </div>
+    <div class="topbar-sep"></div>
+    <div class="badge" id="roleBadge">
+      <span class="badge-dot" id="roleDot"></span>
+      <span id="roleLabel">Choose a role to begin</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Role gate — shown until user picks a role -->
+    <div id="roleGate">
+      <h2>Welcome</h2>
+      <p>Choose how you want to participate in this session.</p>
+      <div class="role-cards">
+        <div class="role-card" id="cardPresenter">
+          <div class="role-card-title">🎤 Presenter</div>
+          <div class="role-card-desc">Upload slides, control navigation. Others follow your view.</div>
+        </div>
+        <div class="role-card" id="cardViewer">
+          <div class="role-card-title">👁 Viewer</div>
+          <div class="role-card-desc">Watch the presentation. Slide updates automatically.</div>
+        </div>
+      </div>
+      <input class="input" id="nameInput" placeholder="Your name" style="margin-top:4px">
+      <button class="btn btn-primary btn-full" id="btnJoin">Join Session</button>
+    </div>
+
+    <!-- Session sidebar — shown after joining -->
+    <div id="sessionSidebar" class="hidden" style="flex-direction:column;height:100%;overflow:hidden">
+
+      <!-- Upload (presenter only) -->
+      <div class="sidebar-section" id="uploadSection">
+        <div class="section-label">Upload</div>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".pptx,.ppt">
+          <div class="upload-zone-icon">📁</div>
+          <p><strong>Click or drag</strong> a .pptx or .ppt file</p>
+        </div>
+        <div id="uploadStatus" class="upload-status"></div>
+      </div>
+
+      <!-- Files -->
+      <div class="sidebar-section grow">
+        <div class="section-label section-label-row">
+          Presentations
+          <button class="btn btn-secondary btn-refresh" id="btnRefreshFiles">↻</button>
+        </div>
+        <div id="fileList"><p class="empty-hint">No files uploaded yet.</p></div>
+
+        <!-- Viewer notice -->
+        <div class="viewer-notice" id="viewerNotice">
+          ● Live — following presenter's slide automatically
+        </div>
+      </div>
+
+      <!-- Presenter info -->
+      <div class="sidebar-section">
+        <div class="section-label">Session</div>
+        <div class="presenter-pill" id="presenterPill">
+          <span>🎤</span>
+          <span>Presenter: <strong id="presenterName">—</strong></span>
+        </div>
+        <div class="session-info" id="sessionInfo"></div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Main viewer -->
+  <main class="viewer">
+    <div class="progress-bar-wrap" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="slide-stage">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-state-icon">🖼️</div>
+        <h2 id="emptyTitle">Join a session to begin</h2>
+        <p id="emptyDesc">Select your role and enter your name to get started.</p>
+      </div>
+      <div class="slide-loading" id="slideLoading"><div class="spinner"></div></div>
+      <img class="slide-canvas" id="slideCanvas" alt="Slide">
+    </div>
+
+    <div class="render-status" id="renderStatus">
+      <div class="render-dot" id="renderDot"></div>
+      <span id="renderText">Rendering slides…</span>
+    </div>
+
+    <div class="controls" id="controls">
+      <button class="btn btn-secondary btn-icon" id="btnPrev" disabled>◀</button>
+      <div class="controls-center">
+        <div class="slide-counter" id="slideCounter">— / —</div>
+        <input class="input goto-input" id="gotoInput" type="number" min="1" placeholder="Go">
+        <button class="btn btn-secondary" id="btnGoto" disabled>Go</button>
+      </div>
+      <button class="btn btn-secondary btn-icon" id="btnNext" disabled>▶</button>
+      <span class="viewer-label">LIVE VIEW</span>
+    </div>
+  </main>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/pptsharing/index.js"></script>
+</body>
+</html>

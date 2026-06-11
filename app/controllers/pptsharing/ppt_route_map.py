@@ -92,7 +92,7 @@ def handle_get_current_slideno(request: HTTPRequest) -> HTTPResponse:
     if not _manager.current_file:
         return json_error("No presentation file loaded", 404)
 
-    return HTTPResponse.json({"slide": _manager.current_slideno})
+    return HTTPResponse.json({"slide": _manager.current_slideno + 1})
 
 # handler for changing the slide no to a number
 # POST /api/ppt/slides/goto
