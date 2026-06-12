@@ -40,7 +40,7 @@ class HTTPRequest:
 
             print(header_block)
             print("\n\n")
-            print(body)
+            # print(body)
             lines = header_block.split('\r\n')
             
             if not lines:
@@ -121,7 +121,7 @@ class HTTPRequest:
                     
                     # Parse Content-Disposition header
                     if line_lower.startswith("content-disposition:"):
-                        self._parse_content_disposition(line, field_name, filename)
+                        # self._parse_content_disposition(line, field_name, filename)
                         field_name, filename = self._extract_disposition_params(line)
                     
                     # Parse Content-Type header
@@ -446,6 +446,12 @@ class HTTPServer:
     # if the handler response is None, 204 will be returned
     # if there are errors in the function, 500 will be returned
     def _handle_request_impl(self, request: HTTPRequest) -> HTTPResponse:
+        if self.static_dir:
+            static_resp = self.serve_static(request)
+
+            if static_resp.status != 404:
+                return static_resp
+
         # Apply middleware
         response = self._apply_middleware(request)
         if response is not None:
