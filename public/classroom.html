@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CodEdu Classroom - Live session with screen sharing, quizzes, and PPT sync.">
+  <title>CodEdu - Classroom</title>
+  <link rel="stylesheet" href="/css/dashboard/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <header class="mobile-bar">
+      <button class="mobile-menu-btn" type="button" onclick="toggleSidebar()" aria-label="Open navigation">Menu</button>
+      <a class="mobile-brand" href="/dashboard.html"><span class="brand-mark brand-mark-sm">C</span> CodEdu</a>
+    </header>
+    <button class="sidebar-overlay" type="button" onclick="closeSidebar()" aria-label="Close navigation"></button>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <a href="/dashboard.html"><span class="brand-mark brand-mark-sm">C</span><span>CodEdu</span></a>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item nav-back" href="/dashboard.html">Back to dashboard</a>
+        <div class="nav-section">Classroom</div>
+        <div class="nav-item active">Live session</div>
+        <div class="nav-section">Participants <span id="p-count-badge" class="badge">0</span></div>
+        <div id="sidebar-participants"></div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-badge">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-info">
+            <div class="name" id="user-display-name">Loading...</div>
+            <div class="points" id="user-points">0 pts</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header page-header-row">
+        <div>
+          <p class="eyebrow">Live classroom</p>
+          <h1 id="class-name">Classroom</h1>
+          <p>Code <button class="code-button" id="class-code" type="button" title="Copy class code">---</button><span class="meta-separator">/</span> <span id="class-mode">---</span></p>
+        </div>
+        <div id="class-role-badge"></div>
+      </div>
+
+      <div class="classroom-layout">
+        <div class="classroom-main">
+          <div class="screen-viewer" id="screen-viewer">
+            <div class="placeholder" id="screen-placeholder">
+              <div class="screen-placeholder-mark" aria-hidden="true">Screen</div>
+              <p>No screen sharing active</p>
+              <span>The host can start sharing when the session begins.</span>
+            </div>
+            <img id="screen-img" style="display:none" alt="Screen Share">
+            <div class="screen-status live" id="screen-live-badge" style="display:none">LIVE</div>
+          </div>
+
+          <div id="host-controls" style="display:none">
+            <div class="host-controls">
+              <button class="btn btn-primary" id="btn-share-screen" onclick="toggleScreenShare()">Start screen share</button>
+              <button class="btn btn-secondary" id="btn-create-quiz" onclick="openModal('create-quiz')">Create quiz</button>
+              <button class="btn btn-secondary" onclick="openModal('post-news')">Post news</button>
+            </div>
+          </div>
+
+          <div class="glass-card quiz-panel" id="quiz-panel" style="display:none">
+            <div class="quiz-progress" id="quiz-progress">Question 1 of 5</div>
+            <div class="quiz-timer" id="quiz-timer">30</div>
+            <div class="quiz-question" id="quiz-question-text">Loading question...</div>
+            <div class="quiz-options" id="quiz-options"></div>
+            <div id="quiz-result" style="text-align:center;margin-top:16px;display:none"></div>
+            <div id="quiz-host-controls" style="display:none;margin-top:16px;text-align:center">
+              <button class="btn btn-primary" onclick="sendNextQuestion()">Next question</button>
+            </div>
+          </div>
+
+          <div class="glass-card" id="quiz-leaderboard" style="display:none">
+            <div class="section-title">Quiz results</div>
+            <div class="leaderboard-list" id="quiz-lb-list"></div>
+          </div>
+        </div>
+
+        <div class="classroom-aside">
+          <div class="glass-card">
+            <div class="section-title">Participants <span class="badge" id="p-count">0</span></div>
+            <div class="participant-list" id="participant-list">
+              <div class="empty-state"><p>Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="glass-card ppt-viewer" id="ppt-section" style="display:none">
+            <div class="section-title">Slides</div>
+            <div class="ppt-slide-frame">
+              <div class="ppt-empty" id="ppt-empty">No presentation uploaded</div>
+              <img id="ppt-slide-img" alt="Current presentation slide" style="display:none">
+            </div>
+            <div class="ppt-controls">
+              <button class="btn btn-sm btn-secondary" id="btn-ppt-prev" onclick="navigatePPT('prev')">Previous</button>
+              <span class="slide-num" id="ppt-slide-num">0 / 0</span>
+              <button class="btn btn-sm btn-secondary" id="btn-ppt-next" onclick="navigatePPT('next')">Next</button>
+            </div>
+            <div id="ppt-upload-area" style="display:none;margin-top:12px">
+              <input type="file" id="ppt-file-input" accept=".pptx" style="display:none" onchange="uploadPPT()">
+              <button class="btn btn-sm btn-secondary btn-block" onclick="document.getElementById('ppt-file-input').click()">Upload presentation</button>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="section-title">News</div>
+            <div class="news-list" id="class-news" style="max-height:200px;overflow-y:auto">
+              <div class="empty-state"><p>No news</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-create-quiz">
+    <div class="modal glass-card" style="max-width:600px">
+      <div class="modal-header"><h2>Create Quiz</h2><button class="modal-close" onclick="closeModal('create-quiz')">&times;</button></div>
+      <form onsubmit="createQuiz(event)">
+        <div class="form-group"><label>Quiz Title</label><input type="text" class="form-input" id="quiz-title" required placeholder="e.g. Chapter 5 Review"></div>
+        <div id="questions-container">
+          <div class="question-block" data-idx="0">
+            <strong style="font-size:13px;color:var(--text-secondary)">Question 1</strong>
+            <div class="form-group" style="margin-top:8px"><input type="text" class="form-input q-text" placeholder="Question text" required></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <input type="text" class="form-input q-a" placeholder="Option A" required>
+              <input type="text" class="form-input q-b" placeholder="Option B" required>
+              <input type="text" class="form-input q-c" placeholder="Option C" required>
+              <input type="text" class="form-input q-d" placeholder="Option D" required>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+              <label style="font-size:12px;color:var(--text-secondary)">Correct:</label>
+              <select class="form-input q-correct" style="width:80px;padding:6px"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+              <label style="font-size:12px;color:var(--text-secondary);margin-left:auto">Time (s):</label>
+              <input type="number" class="form-input q-time" value="30" min="5" max="120" style="width:70px;padding:6px">
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addQuestionBlock()" style="margin-bottom:16px">+ Add Question</button>
+        <button type="submit" class="btn btn-primary form-submit">Create Quiz</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-post-news">
+    <div class="modal glass-card">
+      <div class="modal-header"><h2>Post News</h2><button class="modal-close" onclick="closeModal('post-news')">&times;</button></div>
+      <form onsubmit="postNews(event)">
+        <div class="form-group"><label>Title</label><input type="text" class="form-input" id="news-title" required></div>
+        <div class="form-group"><label>Content</label><textarea class="form-input" id="news-content" placeholder="Write your announcement..."></textarea></div>
+        <button type="submit" class="btn btn-primary form-submit">Post</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/dashboard/app.js"></script>
+  <script>
+    Auth.requireAuth();
+    const user = Auth.getUser();
+    const params = new URLSearchParams(window.location.search);
+    const classId = params.get('id');
+    if (!classId) { window.location.href = '/dashboard.html'; }
+
+    let screenCapture = null;
+    let isSharing = false;
+    let isHost = false;
+    let currentQuizId = null;
+    let currentQuestionId = null;
+    let currentQuestionOrder = 0;
+    let timerInterval = null;
+
+    document.getElementById('user-display-name').textContent = user?.display_name || user?.username;
+    document.getElementById('user-avatar').textContent = (user?.username || '?')[0].toUpperCase();
+    document.getElementById('user-points').textContent = (user?.total_points || 0) + ' pts';
+
+    loadClassroom();
+    connectSSE();
+
+    async function loadClassroom() {
+      try {
+        const data = await api(`/api/classroom/${classId}`);
+        const c = data.classroom;
+        document.getElementById('class-name').textContent = c.name;
+        document.getElementById('class-code').textContent = c.code;
+        document.getElementById('class-mode').textContent = c.mode === 'ppt_sharing' ? 'PPT + Quiz' : 'Quiz Only';
+        document.title = `CodEdu - ${c.name}`;
+
+        isHost = c.user_role === 'host';
+        if (isHost) {
+          document.getElementById('host-controls').style.display = '';
+          document.getElementById('class-role-badge').innerHTML = '<span class="class-badge host role-badge">Host</span>';
+          document.getElementById('ppt-upload-area').style.display = '';
+          document.getElementById('quiz-host-controls').style.display = '';
+        } else {
+          document.getElementById('class-role-badge').innerHTML = '<span class="class-badge member role-badge">Participant</span>';
+        }
+
+        if (c.mode === 'ppt_sharing') {
+          document.getElementById('ppt-section').style.display = '';
+          checkPPTStatus();
+        }
+
+        renderParticipants(c.participants || []);
+        loadNews();
+        checkScreenStatus();
+
+        document.getElementById('class-code').onclick = () => {
+          navigator.clipboard.writeText(c.code);
+          showToast('Code copied!', 'info');
+        };
+      } catch (e) {
+        showToast('Failed to load classroom: ' + e.message, 'error');
+      }
+    }
+
+    function renderParticipants(list) {
+      const el = document.getElementById('participant-list');
+      const sidebar = document.getElementById('sidebar-participants');
+      document.getElementById('p-count').textContent = list.length;
+      document.getElementById('p-count-badge').textContent = list.length;
+
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><p>No participants</p></div>'; return; }
+      const html = list.map(p => `
+        <div class="participant-item">
+          <div class="p-avatar">${(p.username || '?')[0].toUpperCase()}</div>
+          <div class="p-name">${escapeHtml(p.display_name || p.username)}</div>
+          <span class="p-role ${p.role}">${p.role}</span>
+        </div>
+      `).join('');
+      el.innerHTML = html;
+      sidebar.innerHTML = list.slice(0, 6).map(p => `
+        <div class="nav-item sidebar-person"><span class="sidebar-initial">${escapeHtml((p.username || '?')[0].toUpperCase())}</span>${escapeHtml(p.display_name || p.username)}</div>
+      `).join('');
+    }
+
+    function connectSSE() {
+      const sse = new SSEConnection(`/api/classroom/${classId}/stream`);
+      sse.on('participant_joined', (data) => {
+        showToast(`${data.display_name || data.username} joined!`, 'info');
+        loadClassroom();
+      });
+      sse.on('quiz_started', (data) => {
+        currentQuizId = data.quiz_id;
+        showToast(`Quiz started: ${data.title}`, 'info');
+      });
+      sse.on('quiz_question', (data) => {
+        showQuizQuestion(data);
+      });
+      sse.on('quiz_ended', (data) => {
+        showQuizLeaderboard(data.leaderboard);
+      });
+      sse.on('answer_received', (data) => {
+        if (isHost) showToast(`${data.username} answered ${data.is_correct ? 'correctly' : 'incorrectly'}`, 'info');
+      });
+      sse.on('news', (data) => {
+        showToast(data.title, 'info');
+        loadNews();
+      });
+      sse.on('ppt_navigate', (data) => {
+        updateSlideView(data.current_slide, data.total_slides);
+      });
+      sse.on('ppt_uploaded', (data) => {
+        showToast('PPT uploaded!', 'success');
+        updateSlideView(0, data.total_slides);
+        document.getElementById('ppt-section').style.display = '';
+      });
+      sse.connect();
+
+      const screenSSE = new SSEConnection(`/api/classroom/${classId}/screen/stream`);
+      screenSSE.on('frame', (b64) => {
+        const img = document.getElementById('screen-img');
+        img.src = 'data:image/jpeg;base64,' + b64;
+        img.style.display = '';
+        document.getElementById('screen-placeholder').style.display = 'none';
+        document.getElementById('screen-live-badge').style.display = '';
+      });
+      screenSSE.on('screen_stopped', () => {
+        document.getElementById('screen-img').style.display = 'none';
+        document.getElementById('screen-placeholder').style.display = '';
+        document.getElementById('screen-live-badge').style.display = 'none';
+      });
+      screenSSE.connect();
+    }
+
+    async function toggleScreenShare() {
+      const btn = document.getElementById('btn-share-screen');
+      if (!isSharing) {
+        screenCapture = new ScreenCapture(classId);
+        try {
+          await screenCapture.start();
+          isSharing = true;
+          btn.textContent = 'Stop sharing';
+          btn.className = 'btn btn-danger';
+        } catch(e) { /* user cancelled */ }
+      } else {
+        await screenCapture.stop();
+        isSharing = false;
+        btn.textContent = 'Start screen share';
+        btn.className = 'btn btn-primary';
+      }
+    }
+
+    async function checkScreenStatus() {
+      try {
+        const data = await api(`/api/classroom/${classId}/screen/status`);
+        if (data.active) {
+          document.getElementById('screen-live-badge').style.display = '';
+        }
+      } catch(e) {}
+    }
+
+    function showQuizQuestion(data) {
+      currentQuestionId = data.question_id;
+      currentQuestionOrder = (data.question_number || 1) - 1;
+      const panel = document.getElementById('quiz-panel');
+      panel.style.display = '';
+      document.getElementById('quiz-leaderboard').style.display = 'none';
+      document.getElementById('quiz-result').style.display = 'none';
+      document.getElementById('quiz-progress').textContent = `Question ${data.question_number} of ${data.total_questions}`;
+      document.getElementById('quiz-question-text').textContent = data.question;
+
+      const options = ['A', 'B', 'C', 'D'];
+      const optEl = document.getElementById('quiz-options');
+      optEl.innerHTML = options.map(opt => `
+        <div class="quiz-option" id="opt-${opt}" onclick="selectAnswer('${opt}')">
+          <span class="opt-letter">${opt}</span>
+          <span>${escapeHtml(data['option_' + opt.toLowerCase()])}</span>
+        </div>
+      `).join('');
+
+      let timeLeft = data.time_limit || 30;
+      document.getElementById('quiz-timer').textContent = timeLeft;
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('quiz-timer').textContent = timeLeft;
+        if (timeLeft <= 0) clearInterval(timerInterval);
+      }, 1000);
+    }
+
+    async function selectAnswer(opt) {
+      if (!currentQuestionId) return;
+      document.querySelectorAll('.quiz-option').forEach(el => el.style.pointerEvents = 'none');
+      document.getElementById('opt-' + opt).classList.add('selected');
+
+      try {
+        const data = await apiPost(`/api/classroom/${classId}/quiz/${currentQuizId}/answer`, {
+          question_id: currentQuestionId,
+          selected_option: opt,
+        });
+        const result = document.getElementById('quiz-result');
+        result.style.display = '';
+        if (data.is_correct) {
+          result.innerHTML = `<span class="quiz-feedback correct">Correct. +${data.points_earned} pts</span>`;
+          document.getElementById('opt-' + opt).classList.add('correct');
+        } else {
+          result.innerHTML = `<span class="quiz-feedback wrong">Incorrect. Answer: ${data.correct_option}</span>`;
+          document.getElementById('opt-' + opt).classList.add('wrong');
+          document.getElementById('opt-' + data.correct_option).classList.add('correct');
+        }
+        if (timerInterval) clearInterval(timerInterval);
+      } catch(e) {
+        showToast(e.message, 'error');
+      }
+    }
+
+    async function sendNextQuestion() {
+      try {
+        await apiPost(`/api/classroom/${classId}/quiz/${currentQuizId}/next`, { current_order: currentQuestionOrder });
+      } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    function showQuizLeaderboard(lb) {
+      document.getElementById('quiz-panel').style.display = 'none';
+      const el = document.getElementById('quiz-leaderboard');
+      el.style.display = '';
+      const list = document.getElementById('quiz-lb-list');
+      const rankClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal';
+      list.innerHTML = lb.map((u, i) => `
+        <div class="lb-item">
+          <div class="lb-rank ${rankClass(i)}">${i + 1}</div>
+          <div class="lb-name">${escapeHtml(u.display_name || u.username)}</div>
+          <div class="lb-score">${u.total_score} pts (${u.correct_count}/${u.total_answered})</div>
+        </div>
+      `).join('');
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    let questionCount = 1;
+    function addQuestionBlock() {
+      questionCount++;
+      const container = document.getElementById('questions-container');
+      const div = document.createElement('div');
+      div.className = 'question-block';
+      div.innerHTML = `
+        <strong style="font-size:13px;color:var(--text-secondary)">Question ${questionCount}</strong>
+        <div class="form-group" style="margin-top:8px"><input type="text" class="form-input q-text" placeholder="Question text" required></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <input type="text" class="form-input q-a" placeholder="Option A" required>
+          <input type="text" class="form-input q-b" placeholder="Option B" required>
+          <input type="text" class="form-input q-c" placeholder="Option C" required>
+          <input type="text" class="form-input q-d" placeholder="Option D" required>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:var(--text-secondary)">Correct:</label>
+          <select class="form-input q-correct" style="width:80px;padding:6px"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+          <label style="font-size:12px;color:var(--text-secondary);margin-left:auto">Time (s):</label>
+          <input type="number" class="form-input q-time" value="30" min="5" max="120" style="width:70px;padding:6px">
+        </div>`;
+      container.appendChild(div);
+    }
+
+    async function createQuiz(e) {
+      e.preventDefault();
+      const blocks = document.querySelectorAll('.question-block');
+      const questions = Array.from(blocks).map(b => ({
+        question: b.querySelector('.q-text').value,
+        option_a: b.querySelector('.q-a').value,
+        option_b: b.querySelector('.q-b').value,
+        option_c: b.querySelector('.q-c').value,
+        option_d: b.querySelector('.q-d').value,
+        correct_option: b.querySelector('.q-correct').value,
+        time_limit: parseInt(b.querySelector('.q-time').value) || 30,
+      }));
+      try {
+        const data = await apiPost(`/api/classroom/${classId}/quiz`, {
+          title: document.getElementById('quiz-title').value,
+          questions,
+        });
+        closeModal('create-quiz');
+        showToast('Quiz created! Starting...', 'success');
+        currentQuizId = data.quiz_id;
+        await apiPost(`/api/classroom/${classId}/quiz/${data.quiz_id}/start`, {});
+      } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function checkPPTStatus() {
+      try {
+        const data = await api(`/api/classroom/${classId}/ppt/status`);
+        if (data.loaded) updateSlideView(data.current_slide, data.total_slides);
+      } catch(e) {}
+    }
+
+    function updateSlideView(current, total) {
+      const image = document.getElementById('ppt-slide-img');
+      image.src = `/api/classroom/${classId}/ppt/slide/${current}`;
+      image.style.display = '';
+      document.getElementById('ppt-empty').style.display = 'none';
+      document.getElementById('ppt-slide-num').textContent = `${current + 1} / ${total}`;
+    }
+
+    async function navigatePPT(action) {
+      if (!isHost) return;
+      try { await apiPost(`/api/classroom/${classId}/ppt/navigate`, { action }); } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function uploadPPT() {
+      const file = document.getElementById('ppt-file-input').files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const token = Auth.getToken();
+        const res = await fetch(`/api/classroom/${classId}/ppt/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('PPT uploaded!', 'success');
+      } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function loadNews() {
+      try {
+        const data = await api(`/api/classroom/${classId}/news`);
+        const el = document.getElementById('class-news');
+        if (!data.news.length) { el.innerHTML = '<div class="empty-state"><p>No news</p></div>'; return; }
+        el.innerHTML = data.news.slice(0, 5).map(n => `
+          <div class="news-item">
+            <div class="news-title">${escapeHtml(n.title)}</div>
+            <div class="news-content">${escapeHtml(n.content || '')}</div>
+            <div class="news-meta">${escapeHtml(n.author_name || '')} · ${formatDate(n.created_at)}</div>
+          </div>
+        `).join('');
+      } catch(e) {}
+    }
+
+    async function postNews(e) {
+      e.preventDefault();
+      try {
+        await apiPost(`/api/classroom/${classId}/news`, {
+          title: document.getElementById('news-title').value,
+          content: document.getElementById('news-content').value,
+        });
+        closeModal('post-news');
+        showToast('News posted!', 'success');
+      } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    function openModal(name) { document.getElementById('modal-' + name).classList.add('show'); }
+    function closeModal(name) { document.getElementById('modal-' + name).classList.remove('show'); }
+  </script>
+</body>
+</html>
