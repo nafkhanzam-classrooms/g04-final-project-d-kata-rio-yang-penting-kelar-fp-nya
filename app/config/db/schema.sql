@@ -1,9 +1,15 @@
-CREATE DATABASE IF NOT EXISTS g04_db
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
+-- CREATE DATABASE IF NOT EXISTS g04_db
+--   CHARACTER SET utf8mb4
+--   COLLATE utf8mb4_unicode_ci;
+--
 USE g04_db;
 
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS role;
+
+--
 -- SCHEMA START BELOW!!!
 
 -- Created by Redgate Data Modeler (https://datamodeler.redgate-platform.com)
