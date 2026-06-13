@@ -1,4 +1,4 @@
-const API = "http://localhost:8000/api/ppt";
+const API = "https://localhost/api/ppt";
 
 let state = {
   role: null, // 'presenter' | 'viewer'

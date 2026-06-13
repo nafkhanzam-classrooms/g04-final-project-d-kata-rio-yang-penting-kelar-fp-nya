@@ -1,6 +1,7 @@
 # main entry for the system
 
 # import os
+import os
 from pathlib import Path
 from app.config.config import load_env_file
 from app.http.http_server import HTTPServer
@@ -23,7 +24,7 @@ db.load_schema(str((Path(__file__).parent / "config" / "db" / "schema.sql").reso
 
 print(f"PUBLIC_DIR: {PUBLIC_DIR}")
 
-server = HTTPServer(port=8000, static_dir=PUBLIC_DIR)
+server = HTTPServer(port=int(os.environ.get("APP_PORT", "8000")), static_dir=PUBLIC_DIR)
 
 # register_ppt_routes(server)
 # register_testing_routes(server)
