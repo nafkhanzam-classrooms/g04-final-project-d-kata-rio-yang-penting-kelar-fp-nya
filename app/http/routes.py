@@ -6,11 +6,12 @@ from app.routes.dashboard.dashboard_route import register_dashboard_routes
 from app.routes.pptsharing.pptsharing_route import register_ppt_routes
 
 
-def register_all_routes(server):
+def register_all_routes(server, db: Database | None = None) -> None:
     """Register all application routes with the HTTP server."""
     print("[ROUTES] Registering routes...")
 
-    db = Database.from_env()
+    if db is None:
+        db = Database.from_env()
 
     register_auth_routes(server, db)
     register_classroom_routes(server, db)

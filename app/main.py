@@ -1,11 +1,20 @@
 # main entry for the system
 
+# import os
 from pathlib import Path
-from app.config.config import load_dotenv
+from app.config.config import load_env_file
 from app.http.http_server import HTTPServer
 from app.routes.pptsharing.pptsharing_route import register_ppt_routes
+from app.config.db.connection import Database
+from app.http.routes import (
+    register_auth_routes,
+    register_classroom_routes,
+    register_dashboard_routes,
+    register_screen_routes,
+)
 
-load_dotenv(__name__)
+# print(f"{str(Path(__file__).parent.parent.resolve())}")
+load_env_file(str(Path(__file__).parent.parent.resolve()))
 
 def get_project_public_pathdir() -> Path:
     current_file = Path(__file__).resolve()
@@ -13,7 +22,16 @@ def get_project_public_pathdir() -> Path:
 
     return public_root_dir
 
+def register_routes(server: HTTPServer, db: Database) -> None:
+    register_auth_routes(server, db)
+    register_classroom_routes(server, db)
+    register_screen_routes(server, db)
+    register_dashboard_routes(server, db)
+
 PUBLIC_DIR: Path = get_project_public_pathdir()
+
+db = Database.from_env()
+db.load_schema(str((Path(__file__).parent / "config" / "db" / "schema.sql").resolve()))
 
 print(f"PUBLIC_DIR: {PUBLIC_DIR}")
 
@@ -22,6 +40,7 @@ server = HTTPServer(port=8000, static_dir=PUBLIC_DIR)
 # register_ppt_routes(server)
 # register_testing_routes(server)
 
+register_routes(server, db)
 register_ppt_routes(server)
 
 server.run()
