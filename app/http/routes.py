@@ -1,8 +1,8 @@
 from app.config.db.connection import Database
-from app.controllers.authentication.auth_controller import register_auth_routes
-from app.controllers.classroom.classroom_controller import register_classroom_routes
-from app.controllers.dashboard.dashboard_controller import register_dashboard_routes
 from app.controllers.screen_sharing.screen_controller import register_screen_routes
+from app.routes.authentication.authentication_route import register_auth_routes
+from app.routes.clasroom.classroom_route import register_classroom_routes
+from app.routes.dashboard.dashboard_route import register_dashboard_routes
 from app.routes.pptsharing.pptsharing_route import register_ppt_routes
 
 
