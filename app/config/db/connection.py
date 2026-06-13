@@ -80,11 +80,11 @@ class Database:
     @classmethod
     def from_env(cls, prefix: str = "DB_") -> "Database":
         return cls(
-            host=os.getenv(f"{prefix}HOST", "localhost"),
-            port=int(os.getenv(f"{prefix}PORT", "3306")),
-            user=os.getenv(f"{prefix}USER", "root"),
-            password=os.getenv(f"{prefix}PASSWORD", ""),
-            database=os.getenv(f"{prefix}NAME", ""),
+            host=os.environ.get(f"{prefix}HOST", "localhost"),
+            port=int(os.environ.get(f"{prefix}PORT", "3306")),
+            user=os.environ.get(f"{prefix}USER", "root"),
+            password=os.environ.get(f"{prefix}PASSWORD", ""),
+            database=os.environ.get(f"{prefix}NAME", ""),
         )
 
     # get a connection from the pool, caller must close() it (returns to pool)
@@ -162,3 +162,30 @@ class Database:
         except Exception as exc:
             print(f"[Database] ping failed: {exc}")
             return False
+
+    # load a SQL schema file from the given path in the function param
+    def load_schema(self, schema_path: str) -> None:
+        with open(schema_path, "r") as f:
+            sql_content = f.read()
+
+        conn = self.get_connection()
+        cur: MySQLCursor = conn.cursor()
+        try:
+            for statement in sql_content.split(";"):
+                statement = statement.strip()
+    
+                if not statement:
+                    continue
+
+                cur.execute(statement)
+
+            conn.commit()
+            cur.close()
+
+            print("[DATABASE] Schema Loaded")
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CodEdu - Interactive Learning Platform. Login or register to access classrooms, quizzes, and screen sharing.">
+  <title>CodEdu - Login</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card glass-card">
+      <div class="logo">
+        <div class="brand-mark" aria-hidden="true">C</div>
+        <h1>CodEdu</h1>
+        <p>Classroom tools for focused learning.</p>
+      </div>
+
+      <div class="login-tabs">
+        <button class="login-tab active" id="tab-login" onclick="switchTab('login')">Sign In</button>
+        <button class="login-tab" id="tab-register" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <div id="login-error" class="login-error"></div>
+
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" class="form-input" placeholder="Enter your username" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="form-input" placeholder="Enter your password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg form-submit" id="login-btn">Sign In</button>
+      </form>
+
+      <form id="register-form" style="display:none" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="reg-username">Username</label>
+          <input type="text" id="reg-username" class="form-input" placeholder="Choose a username" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" class="form-input" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-display">Display Name</label>
+          <input type="text" id="reg-display" class="form-input" placeholder="Your display name">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password</label>
+          <input type="password" id="reg-password" class="form-input" placeholder="At least 4 characters" required minlength="4">
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg form-submit" id="reg-btn">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    if (Auth.isLoggedIn()) window.location.href = '/dashboard.html';
+
+    function switchTab(tab) {
+      document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+      document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+      document.getElementById('login-form').style.display = tab === 'login' ? '' : 'none';
+      document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
+      hideError();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('login-error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    function hideError() { document.getElementById('login-error').style.display = 'none'; }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      hideError();
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      try {
+        const data = await apiPost('/api/auth/login', {
+          username: document.getElementById('login-username').value,
+          password: document.getElementById('login-password').value,
+        });
+        Auth.setToken(data.token);
+        Auth.setUser(data.user);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      hideError();
+      const btn = document.getElementById('reg-btn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+      try {
+        const data = await apiPost('/api/auth/register', {
+          username: document.getElementById('reg-username').value,
+          email: document.getElementById('reg-email').value,
+          display_name: document.getElementById('reg-display').value,
+          password: document.getElementById('reg-password').value,
+        });
+        Auth.setToken(data.token);
+        Auth.setUser(data.user);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    }
+  </script>
+</body>
+</html>

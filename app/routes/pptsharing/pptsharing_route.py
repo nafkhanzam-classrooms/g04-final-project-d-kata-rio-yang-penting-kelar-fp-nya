@@ -55,6 +55,6 @@ def register_ppt_routes(server: HTTPServer) -> None:
     server.add_route("/api/ppt/slides/:num/image",   "GET",   handle_slide_image_bynum)
     server.add_route("/api/ppt/presenter/join",      "POST",  handle_presenter_join)
     server.add_route("/api/ppt/presenter",           "GET",   handle_get_presenter)
-    server.add_route("/", "GET", handle_index)
+    # server.add_route("/", "GET", handle_index)
  
     print("[PPT-ROUTES] Registered PPT routes.")

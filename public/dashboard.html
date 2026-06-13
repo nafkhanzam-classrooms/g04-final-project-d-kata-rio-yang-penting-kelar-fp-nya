@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CodEdu Dashboard - View your classrooms, leaderboard, and class news.">
+  <title>CodEdu - Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <header class="mobile-bar">
+      <button class="mobile-menu-btn" type="button" onclick="toggleSidebar()" aria-label="Open navigation">Menu</button>
+      <a class="mobile-brand" href="/dashboard.html"><span class="brand-mark brand-mark-sm">C</span> CodEdu</a>
+    </header>
+    <button class="sidebar-overlay" type="button" onclick="closeSidebar()" aria-label="Close navigation"></button>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <a href="/dashboard.html"><span class="brand-mark brand-mark-sm">C</span><span>CodEdu</span></a>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">Main</div>
+        <a class="nav-item active" href="/dashboard.html">Dashboard</a>
+        <div class="nav-section">Classes</div>
+        <div id="sidebar-classes"></div>
+        <div class="sidebar-actions">
+          <button class="btn btn-primary btn-sm btn-block" onclick="openModal('create-class')">New class</button>
+          <button class="btn btn-secondary btn-sm btn-block" onclick="openModal('join-class')">Join class</button>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-badge">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-info">
+            <div class="name" id="user-display-name">Loading...</div>
+            <div class="points" id="user-points">0 pts</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm btn-block sidebar-logout" onclick="Auth.logout()">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <p class="eyebrow">Overview</p>
+        <h1 id="greeting">Welcome back</h1>
+        <p>Review your classes, activity, and recent announcements.</p>
+      </div>
+
+      <div class="stats-row">
+        <div class="glass-card stat-card"><div class="stat-label">Classes</div><div class="stat-value" id="stat-classes">0</div></div>
+        <div class="glass-card stat-card"><div class="stat-label">Correct answers</div><div class="stat-value" id="stat-correct">0</div></div>
+        <div class="glass-card stat-card"><div class="stat-label">Total answers</div><div class="stat-value" id="stat-total">0</div></div>
+        <div class="glass-card stat-card"><div class="stat-label">Total points</div><div class="stat-value" id="stat-points">0</div></div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div>
+          <div class="glass-card panel-spaced">
+            <div class="section-title">My classes <span class="badge" id="class-count">0</span></div>
+            <div class="class-list" id="class-list">
+              <div class="empty-state"><p>No classes yet.</p><span>Create a class or join one with a code.</span></div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="section-title">Class news</div>
+            <div class="news-list" id="news-list">
+              <div class="empty-state"><p>No news yet</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="glass-card">
+            <div class="section-title">Leaderboard</div>
+            <div class="leaderboard-list" id="leaderboard-list">
+              <div class="empty-state"><p>No data yet</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-create-class">
+    <div class="modal glass-card">
+      <div class="modal-header"><h2>Create Classroom</h2><button class="modal-close" onclick="closeModal('create-class')">&times;</button></div>
+      <form onsubmit="createClass(event)">
+        <div class="form-group"><label>Class Name</label><input type="text" class="form-input" id="new-class-name" required placeholder="e.g. Network Programming Lab"></div>
+        <div class="form-group"><label>Description</label><textarea class="form-input" id="new-class-desc" placeholder="Optional description"></textarea></div>
+        <div class="form-group"><label>Mode</label>
+          <select class="form-input" id="new-class-mode"><option value="quiz_only">Quiz Only</option><option value="ppt_sharing">PPT Sharing + Quiz</option></select>
+        </div>
+        <button type="submit" class="btn btn-primary form-submit">Create Class</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-join-class">
+    <div class="modal glass-card">
+      <div class="modal-header"><h2>Join Classroom</h2><button class="modal-close" onclick="closeModal('join-class')">&times;</button></div>
+      <form onsubmit="joinClass(event)">
+        <div class="form-group"><label>Class Code</label><input type="text" class="form-input" id="join-code" required placeholder="Enter 6-character code" maxlength="8" style="text-transform:uppercase;letter-spacing:2px;font-size:18px;text-align:center"></div>
+        <button type="submit" class="btn btn-primary form-submit">Join Class</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    Auth.requireAuth();
+    const user = Auth.getUser();
+
+    document.getElementById('user-display-name').textContent = user?.display_name || user?.username || '?';
+    document.getElementById('user-avatar').textContent = (user?.username || '?')[0].toUpperCase();
+    document.getElementById('greeting').textContent = `Welcome back, ${user?.display_name || user?.username}!`;
+
+    loadDashboard();
+
+    async function loadDashboard() {
+      try {
+        const data = await api('/api/dashboard');
+        renderStats(data.stats, data.user);
+        renderClasses(data.classrooms);
+        renderNews(data.news);
+        renderLeaderboard(data.leaderboard);
+        renderSidebarClasses(data.classrooms);
+      } catch (e) {
+        console.error('Dashboard load error:', e);
+        if (e.message.includes('Unauthorized')) Auth.logout();
+      }
+    }
+
+    function renderStats(stats, usr) {
+      document.getElementById('stat-classes').textContent = stats?.class_count || 0;
+      document.getElementById('stat-correct').textContent = stats?.correct_answers || 0;
+      document.getElementById('stat-total').textContent = stats?.total_answers || 0;
+      document.getElementById('stat-points').textContent = usr?.total_points || 0;
+      document.getElementById('user-points').textContent = (usr?.total_points || 0) + ' pts';
+    }
+
+    function renderClasses(classes) {
+      const el = document.getElementById('class-list');
+      document.getElementById('class-count').textContent = classes.length;
+      if (!classes.length) { el.innerHTML = '<div class="empty-state"><p>No classes yet.</p><span>Create a class or join one with a code.</span></div>'; return; }
+      el.innerHTML = classes.map(c => `
+        <a class="class-item" href="/classroom.html?id=${c.id}">
+          <div class="class-icon">${escapeHtml((c.name || 'C').slice(0, 2).toUpperCase())}</div>
+          <div class="class-info">
+            <div class="class-name">${escapeHtml(c.name)}</div>
+            <div class="class-meta">
+              <span>${c.participant_count || 0} members</span>
+              <span>Code: ${escapeHtml(c.code)}</span>
+            </div>
+          </div>
+          <span class="class-badge ${c.role}">${c.role}</span>
+        </a>
+      `).join('');
+    }
+
+    function renderNews(news) {
+      const el = document.getElementById('news-list');
+      if (!news.length) { el.innerHTML = '<div class="empty-state"><p>No news yet</p></div>'; return; }
+      el.innerHTML = news.slice(0, 10).map(n => `
+        <div class="news-item">
+          <div class="news-title">${escapeHtml(n.title)}</div>
+          <div class="news-content">${escapeHtml(n.content || '')}</div>
+          <div class="news-meta">${escapeHtml(n.author_name)} · ${escapeHtml(n.classroom_name)} · ${formatDate(n.created_at)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderLeaderboard(lb) {
+      const el = document.getElementById('leaderboard-list');
+      if (!lb.length) { el.innerHTML = '<div class="empty-state"><p>No data yet</p></div>'; return; }
+      const rankClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal';
+      el.innerHTML = lb.map((u, i) => `
+        <div class="lb-item">
+          <div class="lb-rank ${rankClass(i)}">${i + 1}</div>
+          <div class="lb-name">${escapeHtml(u.display_name || u.username)}</div>
+          <div class="lb-score">${u.total_points} pts</div>
+        </div>
+      `).join('');
+    }
+
+    function renderSidebarClasses(classes) {
+      const el = document.getElementById('sidebar-classes');
+      el.innerHTML = classes.slice(0, 8).map(c => `
+        <a class="nav-item" href="/classroom.html?id=${c.id}">${escapeHtml(c.name)}</a>
+      `).join('');
+    }
+
+    function openModal(name) { document.getElementById('modal-' + name).classList.add('show'); }
+    function closeModal(name) { document.getElementById('modal-' + name).classList.remove('show'); }
+
+    async function createClass(e) {
+      e.preventDefault();
+      try {
+        await apiPost('/api/classroom', {
+          name: document.getElementById('new-class-name').value,
+          description: document.getElementById('new-class-desc').value,
+          mode: document.getElementById('new-class-mode').value,
+        });
+        closeModal('create-class');
+        showToast('Classroom created!', 'success');
+        loadDashboard();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function joinClass(e) {
+      e.preventDefault();
+      try {
+        const data = await apiPost('/api/classroom/join', { code: document.getElementById('join-code').value });
+        closeModal('join-class');
+        showToast(data.message, 'success');
+        loadDashboard();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+  </script>
+</body>
+</html>
